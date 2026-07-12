@@ -3,12 +3,16 @@ package channel
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/bejix/upstream-ops/backend/config"
 	"github.com/bejix/upstream-ops/backend/connector"
+	_ "github.com/bejix/upstream-ops/backend/connector/newapi"
 	"github.com/bejix/upstream-ops/backend/crypto"
 	"github.com/bejix/upstream-ops/backend/storage"
 )
@@ -346,5 +350,50 @@ func TestClearLoginInfoKeepsPasswordCredential(t *testing.T) {
 	}
 	if saved != nil {
 		t.Fatalf("auth session = %#v, want nil", saved)
+	}
+}
+
+func TestTestLoginFailsWhenSessionAuthFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/user/login", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: "bad"})
+		_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"id":7}}`))
+	})
+	mux.HandleFunc("/api/user/self", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"success":false,"message":"Unauthorized, not logged in and no access token provided"}`, http.StatusUnauthorized)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	svc, cipher := testService(t)
+	enc, err := cipher.Encrypt("p")
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	ch := &storage.Channel{
+		Name:           "bad-session",
+		Type:           storage.ChannelTypeNewAPI,
+		SiteURL:        srv.URL,
+		Username:       "u",
+		PasswordCipher: enc,
+		CredentialMode: storage.CredentialModePassword,
+	}
+	if err := svc.Channels.Create(ch); err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	err = svc.TestLogin(context.Background(), ch.ID)
+	if err == nil {
+		t.Fatal("TestLogin succeeded, want auth failure")
+	}
+	if !strings.Contains(err.Error(), "登录后鉴权失败") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	saved, err := svc.AuthSessions.FindByChannel(ch.ID)
+	if err != nil {
+		t.Fatalf("find session: %v", err)
+	}
+	if saved != nil {
+		t.Fatalf("saved session = %#v, want nil", saved)
 	}
 }

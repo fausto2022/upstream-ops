@@ -20,23 +20,31 @@ type Scheduler struct {
 	cron          *cron.Cron
 	monitor       *monitor.Service
 	monLogs       *storage.MonitorLogs
+	syncLogs      *storage.UpstreamSyncLogs
 	rates         *storage.Rates
 	notifies      *storage.Notifications
 	announcements *storage.UpstreamAnnouncements
 	captchas      *storage.Captchas
 	cipher        *crypto.Cipher
+	upstreamSync  upstreamSyncService
 	proxy         config.ProxyConfig
+}
+
+type upstreamSyncService interface {
+	SyncAllOnRateScan(ctx context.Context)
 }
 
 func New(
 	cfg config.SchedulerConfig,
 	m *monitor.Service,
 	monLogs *storage.MonitorLogs,
+	syncLogs *storage.UpstreamSyncLogs,
 	rates *storage.Rates,
 	notifies *storage.Notifications,
 	announcements *storage.UpstreamAnnouncements,
 	captchas *storage.Captchas,
 	cipher *crypto.Cipher,
+	upstreamSync upstreamSyncService,
 	proxy config.ProxyConfig,
 	log *slog.Logger,
 ) *Scheduler {
@@ -46,11 +54,13 @@ func New(
 		cron:          cron.New(cron.WithSeconds()),
 		monitor:       m,
 		monLogs:       monLogs,
+		syncLogs:      syncLogs,
 		rates:         rates,
 		notifies:      notifies,
 		announcements: announcements,
 		captchas:      captchas,
 		cipher:        cipher,
+		upstreamSync:  upstreamSync,
 		proxy:         proxy,
 	}
 }
@@ -101,7 +111,12 @@ func (s *Scheduler) runBalance() {
 func (s *Scheduler) runRates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	s.monitor.ScanAllRates(ctx)
+	if s.monitor != nil {
+		s.monitor.ScanAllRates(ctx)
+	}
+	if s.upstreamSync != nil {
+		s.upstreamSync.SyncAllOnRateScan(ctx)
+	}
 }
 
 func (s *Scheduler) hasRetention() bool {
@@ -124,6 +139,14 @@ func (s *Scheduler) runRetention() {
 			s.log.Warn("retention monitor_logs failed", "err", err)
 		} else if n > 0 {
 			s.log.Info("retention monitor_logs deleted", "rows", n, "before", cutoff)
+		}
+		if s.syncLogs != nil {
+			n, err = s.syncLogs.DeleteBefore(cutoff)
+			if err != nil {
+				s.log.Warn("retention upstream_sync_logs failed", "err", err)
+			} else if n > 0 {
+				s.log.Info("retention upstream_sync_logs deleted", "rows", n, "before", cutoff)
+			}
 		}
 	}
 

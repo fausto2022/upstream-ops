@@ -131,6 +131,12 @@ func AutoMigrate(db *gorm.DB) error {
 		&NotificationLog{},
 		&NotificationCooldown{},
 		&MonitorLog{},
+		&UpstreamSyncTarget{},
+		&UpstreamSyncTargetGroup{},
+		&UpstreamSyncGroup{},
+		&UpstreamSyncAccount{},
+		&UpstreamSyncManagedAccount{},
+		&UpstreamSyncLog{},
 	)
 }
 

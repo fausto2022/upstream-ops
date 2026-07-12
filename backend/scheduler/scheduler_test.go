@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -12,6 +13,14 @@ import (
 	"github.com/bejix/upstream-ops/backend/storage"
 	"gorm.io/gorm"
 )
+
+type fakeUpstreamSync struct {
+	called int
+}
+
+func (f *fakeUpstreamSync) SyncAllOnRateScan(ctx context.Context) {
+	f.called++
+}
 
 func openTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -39,6 +48,7 @@ func TestRunRetentionDeletesAnnouncements(t *testing.T) {
 	notifies := storage.NewNotifications(db)
 	monLogs := storage.NewMonitorLogs(db)
 	rates := storage.NewRates(db)
+	syncLogs := storage.NewUpstreamSyncLogs(db)
 
 	oldTime := time.Now().AddDate(0, 0, -10)
 	if _, err := announcements.Sync(1, []storage.UpstreamAnnouncement{{
@@ -58,9 +68,11 @@ func TestRunRetentionDeletesAnnouncements(t *testing.T) {
 		},
 		&monitor.Service{},
 		monLogs,
+		syncLogs,
 		rates,
 		notifies,
 		announcements,
+		nil,
 		nil,
 		nil,
 		config.ProxyConfig{},
@@ -75,5 +87,87 @@ func TestRunRetentionDeletesAnnouncements(t *testing.T) {
 	}
 	if total != 0 || len(list) != 0 {
 		t.Fatalf("announcements not cleaned: total=%d list=%#v", total, list)
+	}
+}
+
+func TestRunRetentionDeletesUpstreamSyncLogsWithMonitorLogDays(t *testing.T) {
+	db := openTestDB(t)
+	monLogs := storage.NewMonitorLogs(db)
+	syncLogs := storage.NewUpstreamSyncLogs(db)
+	rates := storage.NewRates(db)
+	notifies := storage.NewNotifications(db)
+
+	if err := syncLogs.Append(&storage.UpstreamSyncLog{
+		SyncGroupID: 1,
+		TargetID:    1,
+		Action:      "apply",
+		Success:     true,
+		Message:     "old",
+		CreatedAt:   time.Now().AddDate(0, 0, -10),
+	}); err != nil {
+		t.Fatalf("append old sync log: %v", err)
+	}
+	if err := syncLogs.Append(&storage.UpstreamSyncLog{
+		SyncGroupID: 1,
+		TargetID:    1,
+		Action:      "apply",
+		Success:     true,
+		Message:     "new",
+		CreatedAt:   time.Now(),
+	}); err != nil {
+		t.Fatalf("append new sync log: %v", err)
+	}
+
+	s := New(
+		config.SchedulerConfig{
+			Retention: config.RetentionConfig{
+				MonitorLogsDays: 1,
+			},
+		},
+		&monitor.Service{},
+		monLogs,
+		syncLogs,
+		rates,
+		notifies,
+		nil,
+		nil,
+		nil,
+		nil,
+		config.ProxyConfig{},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+
+	s.runRetention()
+
+	list, total, err := syncLogs.ListPage(1, 10)
+	if err != nil {
+		t.Fatalf("list sync logs: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].Message != "new" {
+		t.Fatalf("sync logs not cleaned: total=%d list=%#v", total, list)
+	}
+}
+
+func TestRunRatesTriggersUpstreamSync(t *testing.T) {
+	syncSvc := &fakeUpstreamSync{}
+	s := New(
+		config.SchedulerConfig{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		syncSvc,
+		config.ProxyConfig{},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+
+	s.runRates()
+
+	if syncSvc.called != 1 {
+		t.Fatalf("sync calls = %d, want 1", syncSvc.called)
 	}
 }

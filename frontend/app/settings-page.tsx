@@ -13,8 +13,9 @@ import {
   Server,
   ShieldCheck,
   Trash2,
+  Workflow,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CaptchaFormDialog } from "@/components/monitor/captcha-form-dialog";
 import { NotificationFormDialog } from "@/components/monitor/notification-form-dialog";
+import { UpstreamSyncSettings } from "@/components/settings/upstream-sync-settings";
 import { apiFetch } from "@/lib/api";
 import { useTriggerRefresh } from "@/lib/refresh-context";
 import type {
@@ -44,7 +46,6 @@ import type {
 import { decimal, money, relativeTime } from "@/lib/format";
 import {
   useCaptchaConfigs,
-  useDashboardSummary,
   useNotificationLogs,
   useNotificationChannels,
   useAppVersion,
@@ -68,7 +69,6 @@ export default function SettingsPage() {
   const query = useSystemConfig();
   const notifications = useNotificationChannels();
   const captchas = useCaptchaConfigs();
-  const summary = useDashboardSummary();
   const notificationLogs = useNotificationLogs(1, 10);
   const appVersion = useAppVersion();
   const refresh = useTriggerRefresh();
@@ -313,6 +313,10 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="captcha" className="px-4 py-2">
             验证码服务
+          </TabsTrigger>
+          <TabsTrigger value="upstream-sync" className="px-4 py-2">
+            <Workflow className="size-3.5" />
+            上游动态同步
           </TabsTrigger>
         </TabsList>
 
@@ -1400,6 +1404,10 @@ export default function SettingsPage() {
             )}
           </SectionCard>
         </TabsContent>
+
+        <TabsContent value="upstream-sync">
+          <UpstreamSyncSettings />
+        </TabsContent>
       </Tabs>
 
       <NotificationFormDialog
@@ -1522,33 +1530,6 @@ function NoteBox({
         {title}
       </p>
       <p className="mt-1 leading-6">{children}</p>
-    </div>
-  );
-}
-
-function StatusBox({
-  title,
-  value,
-  hint,
-  danger = false,
-}: {
-  title: string;
-  value: string;
-  hint: string;
-  danger?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-      <p className="text-[11px] text-muted-foreground">{title}</p>
-      <p
-        className={cn(
-          "mt-1 text-sm font-semibold",
-          danger ? "text-destructive" : "text-foreground",
-        )}
-      >
-        {value}
-      </p>
-      <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
     </div>
   );
 }

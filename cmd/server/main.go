@@ -23,6 +23,7 @@ import (
 	"github.com/bejix/upstream-ops/backend/runtimeconfig"
 	"github.com/bejix/upstream-ops/backend/scheduler"
 	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/bejix/upstream-ops/backend/syncer"
 	"github.com/bejix/upstream-ops/web"
 	"github.com/gin-gonic/gin"
 
@@ -99,6 +100,12 @@ func main() {
 	announcements := storage.NewUpstreamAnnouncements(db)
 	rates := storage.NewRates(db)
 	monLogs := storage.NewMonitorLogs(db)
+	syncTargets := storage.NewUpstreamSyncTargets(db)
+	syncGroups := storage.NewUpstreamSyncTargetGroups(db)
+	upstreamSyncGroups := storage.NewUpstreamSyncGroups(db)
+	upstreamSyncAccounts := storage.NewUpstreamSyncAccounts(db)
+	managedSyncAccounts := storage.NewUpstreamSyncManagedAccounts(db)
+	syncLogs := storage.NewUpstreamSyncLogs(db)
 
 	channelSvc := channel.NewService(channels, authSessions, captchas, rates, monLogs, cipher)
 	channelSvc.UpdateProxyConfig(cfg.Proxy)
@@ -117,9 +124,11 @@ func main() {
 	})
 	dispatcher.UpdateProxyConfig(cfg.Proxy)
 	monitorSvc := monitor.NewService(channels, announcements, rates, monLogs, channelSvc, dispatcher, log)
+	syncSvc := syncer.New(channels, rates, cipher, channelSvc, log, syncTargets, syncGroups, upstreamSyncGroups, upstreamSyncAccounts, managedSyncAccounts, syncLogs)
+	syncSvc.SetDispatcher(dispatcher)
 
 	schedulerFactory := func(scfg config.SchedulerConfig, pcfg config.ProxyConfig) *scheduler.Scheduler {
-		return scheduler.New(scfg, monitorSvc, monLogs, rates, notifies, announcements, captchas, cipher, pcfg, log)
+		return scheduler.New(scfg, monitorSvc, monLogs, syncLogs, rates, notifies, announcements, captchas, cipher, syncSvc, pcfg, log)
 	}
 	sch := schedulerFactory(cfg.Scheduler, cfg.Proxy)
 	if err := sch.Start(); err != nil {
@@ -172,6 +181,7 @@ func main() {
 		ChannelSvc:    channelSvc,
 		Monitor:       monitorSvc,
 		Dispatcher:    dispatcher,
+		UpstreamSync:  syncSvc,
 		Log:           log,
 		Frontend:      frontendFS,
 	})

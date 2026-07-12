@@ -12,9 +12,7 @@ import type {
   CostTrendPoint,
   DashboardSummary,
   NotificationChannel,
-  NotificationLog,
   NotificationLogPage,
-  RateChangeLog,
   RateChangeLogPage,
   RateSnapshot,
   SystemConfigResponse,
@@ -199,7 +197,6 @@ export function useMultiChannelRates(channelIDs: number[]) {
       cancelled = true
     }
     // channelIDs 是数组引用，用排序后的 key 字符串做依赖避免每次渲染都触发
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, refreshTick, bump])
 
   return { data, loading, refetch: () => setBump((b) => b + 1) }

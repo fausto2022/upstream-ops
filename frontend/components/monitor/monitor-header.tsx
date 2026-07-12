@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, Github, Home, LogOut, RefreshCw, Sun, Moon, Settings, Upload } from "lucide-react"
+import { Activity, Github, Home, LogOut, RefreshCw, Sun, Moon, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,

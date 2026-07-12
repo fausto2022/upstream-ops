@@ -274,12 +274,18 @@ func (c *Client) GetRates(ctx context.Context, ch *connector.Channel, session *c
 			rate = v
 		}
 		out = append(out, connector.RateResult{
+			GroupID:     ptrInt64(g.ID),
 			ModelName:   g.Name,
 			Description: g.Description,
 			Ratio:       rate,
 		})
 	}
 	return out, nil
+}
+
+func ptrInt64(v uint64) *int64 {
+	id := int64(v)
+	return &id
 }
 
 func (c *Client) GetAnnouncements(ctx context.Context, ch *connector.Channel, session *connector.AuthSession) ([]connector.AnnouncementResult, error) {

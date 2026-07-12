@@ -195,6 +195,7 @@ func (s *Service) RefreshRates(ctx context.Context, c *storage.Channel) error {
 		seen[r.ModelName] = struct{}{}
 		prev, err := s.rates.Upsert(&storage.RateSnapshot{
 			ChannelID:       c.ID,
+			RemoteGroupID:   r.GroupID,
 			ModelName:       r.ModelName,
 			Description:     r.Description,
 			Ratio:           r.Ratio,

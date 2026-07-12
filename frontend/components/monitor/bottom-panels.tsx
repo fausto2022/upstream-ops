@@ -17,7 +17,6 @@ import {
   Trash2,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { Badge } from "@/components/ui/badge"
@@ -65,6 +64,7 @@ const eventMeta: Record<NotificationEvent, { icon: LucideIcon; cls: string }> = 
   subscription_weekly_remaining_low: { icon: AlertTriangle, cls: "text-warning" },
   subscription_monthly_remaining_low: { icon: AlertTriangle, cls: "text-warning" },
   subscription_expiring: { icon: Clock3, cls: "text-warning" },
+  upstream_sync_group_changed: { icon: RefreshCw, cls: "text-brand" },
 }
 
 const FEED_PREVIEW_SIZE = 10

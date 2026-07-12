@@ -41,6 +41,7 @@ func (r *Rates) Upsert(snapshot *RateSnapshot) (*RateSnapshot, error) {
 		old := prev
 		prev.Ratio = snapshot.Ratio
 		prev.CompletionRatio = snapshot.CompletionRatio
+		prev.RemoteGroupID = snapshot.RemoteGroupID
 		prev.Description = snapshot.Description
 		prev.LastSeenAt = snapshot.LastSeenAt
 		if err := r.db.Save(&prev).Error; err != nil {

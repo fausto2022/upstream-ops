@@ -332,6 +332,19 @@ func TestRefreshRatesEmitsRateAddedAndRemoved(t *testing.T) {
 	if len(logs) != 0 {
 		t.Fatalf("first refresh logs = %#v", logs)
 	}
+	snapshots, err := rates.ListByChannel(ch.ID)
+	if err != nil {
+		t.Fatalf("list snapshots: %v", err)
+	}
+	remoteGroupIDs := map[string]int64{}
+	for _, snapshot := range snapshots {
+		if snapshot.RemoteGroupID != nil {
+			remoteGroupIDs[snapshot.ModelName] = *snapshot.RemoteGroupID
+		}
+	}
+	if remoteGroupIDs["alpha"] != 1 || remoteGroupIDs["beta"] != 2 {
+		t.Fatalf("remote group ids = %#v", remoteGroupIDs)
+	}
 
 	if err := svc.RefreshRates(context.Background(), ch); err != nil {
 		t.Fatalf("second refresh: %v", err)

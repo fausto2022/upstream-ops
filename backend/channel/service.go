@@ -796,6 +796,15 @@ func (s *Service) login(
 	progress.Start(ctx, progress.StageLogin, "登录上游…")
 	started := time.Now()
 	session, err := conn.Login(ctx, resolved)
+	if err == nil {
+		progress.Start(ctx, progress.StageSession, "验证登录会话…")
+		if checkErr := conn.CheckAuth(ctx, resolved, session); checkErr != nil {
+			err = fmt.Errorf("登录后鉴权失败：%w", checkErr)
+			progress.Fail(ctx, progress.StageSession, err.Error())
+		} else {
+			progress.OK(ctx, progress.StageSession, "登录会话有效")
+		}
+	}
 	finished := time.Now()
 	_ = s.MonitorLogs.Append(&storage.MonitorLog{
 		ChannelID:    c.ID,
@@ -807,6 +816,7 @@ func (s *Service) login(
 	})
 	if err != nil {
 		progress.Fail(ctx, progress.StageLogin, err.Error())
+		_ = s.AuthSessions.Delete(c.ID)
 		_ = s.Channels.SetLastError(c.ID, err.Error())
 		return nil, err
 	}

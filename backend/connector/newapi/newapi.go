@@ -599,6 +599,14 @@ func (c *Client) CreateAPIKey(ctx context.Context, ch *connector.Channel, sessio
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, errors.New("密钥名称不能为空")
 	}
+	beforeIDs := map[int64]struct{}{}
+	if before, err := c.ListAPIKeys(ctx, ch, session, connector.APIKeyQuery{Page: 1, PageSize: 100}); err == nil {
+		for _, item := range before.Items {
+			if item.ID > 0 {
+				beforeIDs[item.ID] = struct{}{}
+			}
+		}
+	}
 	body := buildNewAPICreateToken(req)
 	restyReq := c.http.R().
 		SetContext(ctx).
@@ -612,21 +620,41 @@ func (c *Client) CreateAPIKey(ctx context.Context, ch *connector.Channel, sessio
 	if resp.IsError() {
 		return nil, fmt.Errorf("newapi create api key: %w", connector.HTTPStatusError(resp.StatusCode(), resp.Body()))
 	}
-	if err := decodeNewAPIWrite(resp.Body(), "newapi create api key"); err != nil {
+	data, err := decodeNewAPIWriteData(resp.Body(), "newapi create api key")
+	if err != nil {
 		return nil, err
 	}
-	return &connector.APIKey{
-		Name:               req.Name,
-		Status:             "active",
-		Group:              req.Group,
-		Quota:              float64(valueOr(req.RemainQuota, 0)),
-		UnlimitedQuota:     valueOr(req.UnlimitedQuota, false),
-		ExpiredTime:        valueOr(req.ExpiredTime, int64(-1)),
-		ModelLimitsEnabled: valueOr(req.ModelLimitsEnabled, false),
-		ModelLimits:        req.ModelLimits,
-		AllowIPs:           req.AllowIPs,
-		CrossGroupRetry:    valueOr(req.CrossGroupRetry, false),
-	}, nil
+	if key := newAPIKeyFromCreateData(data, req); key != nil && key.ID > 0 {
+		return key, nil
+	}
+	page, err := c.ListAPIKeys(ctx, ch, session, connector.APIKeyQuery{Page: 1, PageSize: 20, Search: req.Name})
+	if err != nil {
+		return nil, fmt.Errorf("newapi create api key lookup: %w", err)
+	}
+	name := strings.TrimSpace(req.Name)
+	for i := range page.Items {
+		if strings.TrimSpace(page.Items[i].Name) == name && page.Items[i].ID > 0 {
+			return &page.Items[i], nil
+		}
+	}
+	page, err = c.ListAPIKeys(ctx, ch, session, connector.APIKeyQuery{Page: 1, PageSize: 100})
+	if err != nil {
+		return nil, fmt.Errorf("newapi create api key list lookup: %w", err)
+	}
+	for i := range page.Items {
+		if strings.TrimSpace(page.Items[i].Name) == name && page.Items[i].ID > 0 {
+			return &page.Items[i], nil
+		}
+	}
+	for i := range page.Items {
+		if page.Items[i].ID <= 0 {
+			continue
+		}
+		if _, existed := beforeIDs[page.Items[i].ID]; !existed {
+			return &page.Items[i], nil
+		}
+	}
+	return nil, errors.New("newapi create api key: missing key id")
 }
 
 func (c *Client) UpdateAPIKey(ctx context.Context, ch *connector.Channel, session *connector.AuthSession, id int64, req connector.APIKeyUpdateRequest) (*connector.APIKey, error) {
@@ -1113,6 +1141,85 @@ func buildNewAPICreateToken(req connector.APIKeyCreateRequest) map[string]any {
 		body["custom_key"] = strings.TrimSpace(req.CustomKey)
 	}
 	return body
+}
+
+func newAPIKeyFromCreateData(data json.RawMessage, req connector.APIKeyCreateRequest) *connector.APIKey {
+	if len(data) == 0 || string(data) == "null" {
+		return nil
+	}
+	var token newAPIToken
+	if err := json.Unmarshal(data, &token); err == nil && token.ID > 0 {
+		key := token.toConnector()
+		fillNewAPICreatedKeyDefaults(&key, req)
+		return &key
+	}
+	var id int64
+	if err := json.Unmarshal(data, &id); err == nil && id > 0 {
+		key := newAPIKeyFromCreateRequest(id, req)
+		return &key
+	}
+	var idText string
+	if err := json.Unmarshal(data, &idText); err == nil {
+		if parsed, parseErr := strconv.ParseInt(strings.TrimSpace(idText), 10, 64); parseErr == nil && parsed > 0 {
+			key := newAPIKeyFromCreateRequest(parsed, req)
+			return &key
+		}
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err == nil {
+		for _, field := range []string{"id", "token_id", "key_id"} {
+			if id, ok := newAPIIDFromRaw(raw[field]); ok {
+				key := newAPIKeyFromCreateRequest(id, req)
+				return &key
+			}
+		}
+	}
+	return nil
+}
+
+func newAPIIDFromRaw(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, false
+	}
+	var id int64
+	if err := json.Unmarshal(raw, &id); err == nil && id > 0 {
+		return id, true
+	}
+	var idText string
+	if err := json.Unmarshal(raw, &idText); err == nil {
+		if parsed, parseErr := strconv.ParseInt(strings.TrimSpace(idText), 10, 64); parseErr == nil && parsed > 0 {
+			return parsed, true
+		}
+	}
+	return 0, false
+}
+
+func newAPIKeyFromCreateRequest(id int64, req connector.APIKeyCreateRequest) connector.APIKey {
+	return connector.APIKey{
+		ID:                 id,
+		Name:               strings.TrimSpace(req.Name),
+		Status:             "active",
+		Group:              req.Group,
+		Quota:              float64(valueOr(req.RemainQuota, 0)),
+		UnlimitedQuota:     valueOr(req.UnlimitedQuota, false),
+		ExpiredTime:        valueOr(req.ExpiredTime, int64(-1)),
+		ModelLimitsEnabled: valueOr(req.ModelLimitsEnabled, false),
+		ModelLimits:        req.ModelLimits,
+		AllowIPs:           req.AllowIPs,
+		CrossGroupRetry:    valueOr(req.CrossGroupRetry, false),
+	}
+}
+
+func fillNewAPICreatedKeyDefaults(key *connector.APIKey, req connector.APIKeyCreateRequest) {
+	if strings.TrimSpace(key.Name) == "" {
+		key.Name = strings.TrimSpace(req.Name)
+	}
+	if strings.TrimSpace(key.Status) == "" || key.Status == "unknown" {
+		key.Status = "active"
+	}
+	if strings.TrimSpace(key.Group) == "" {
+		key.Group = req.Group
+	}
 }
 
 func buildNewAPIUpdateToken(id int64, req connector.APIKeyUpdateRequest) map[string]any {

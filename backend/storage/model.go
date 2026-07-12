@@ -117,6 +117,7 @@ func (CaptchaConfig) TableName() string { return "captcha_configs" }
 type RateSnapshot struct {
 	ID              uint    `gorm:"primaryKey" json:"id"`
 	ChannelID       uint    `gorm:"not null;uniqueIndex:idx_rate_chan_model" json:"channel_id"`
+	RemoteGroupID   *int64  `json:"remote_group_id,omitempty"`
 	ModelName       string  `gorm:"size:256;not null;uniqueIndex:idx_rate_chan_model" json:"model_name"`
 	Description     string  `gorm:"size:512" json:"description,omitempty"`
 	Ratio           float64 `gorm:"not null" json:"ratio"`
@@ -215,19 +216,20 @@ func (NotificationChannel) TableName() string { return "notification_channels" }
 type NotificationEvent string
 
 const (
-	EventBalanceLow             NotificationEvent = "balance_low"
-	EventRateChanged            NotificationEvent = "rate_changed"
-	EventRateStructureChanged   NotificationEvent = "rate_structure_changed"
-	EventRateAdded              NotificationEvent = "rate_added"
-	EventRateRemoved            NotificationEvent = "rate_removed"
-	EventAnnouncement           NotificationEvent = "announcement"
-	EventLoginFailed            NotificationEvent = "login_failed"
-	EventCaptchaFailed          NotificationEvent = "captcha_failed"
-	EventMonitorFailed          NotificationEvent = "monitor_failed"
-	EventSubscriptionDailyLow   NotificationEvent = "subscription_daily_remaining_low"
-	EventSubscriptionWeeklyLow  NotificationEvent = "subscription_weekly_remaining_low"
-	EventSubscriptionMonthlyLow NotificationEvent = "subscription_monthly_remaining_low"
-	EventSubscriptionExpiring   NotificationEvent = "subscription_expiring"
+	EventBalanceLow               NotificationEvent = "balance_low"
+	EventRateChanged              NotificationEvent = "rate_changed"
+	EventRateStructureChanged     NotificationEvent = "rate_structure_changed"
+	EventRateAdded                NotificationEvent = "rate_added"
+	EventRateRemoved              NotificationEvent = "rate_removed"
+	EventAnnouncement             NotificationEvent = "announcement"
+	EventLoginFailed              NotificationEvent = "login_failed"
+	EventCaptchaFailed            NotificationEvent = "captcha_failed"
+	EventMonitorFailed            NotificationEvent = "monitor_failed"
+	EventSubscriptionDailyLow     NotificationEvent = "subscription_daily_remaining_low"
+	EventSubscriptionWeeklyLow    NotificationEvent = "subscription_weekly_remaining_low"
+	EventSubscriptionMonthlyLow   NotificationEvent = "subscription_monthly_remaining_low"
+	EventSubscriptionExpiring     NotificationEvent = "subscription_expiring"
+	EventUpstreamSyncGroupChanged NotificationEvent = "upstream_sync_group_changed"
 )
 
 // NotificationLog 通知发送记录。
@@ -287,3 +289,123 @@ type MonitorLog struct {
 }
 
 func (MonitorLog) TableName() string { return "monitor_logs" }
+
+// UpstreamSyncTarget 目标 Sub2API 站点配置。
+//
+// 管理员 API Key 单独加密保存，检测结果只作为状态缓存，不影响已保存的同步分组。
+type UpstreamSyncTarget struct {
+	ID                uint       `gorm:"primaryKey" json:"id"`
+	Name              string     `gorm:"size:128;not null;uniqueIndex" json:"name"`
+	BaseURL           string     `gorm:"size:512;not null" json:"base_url"`
+	AdminAPIKeyCipher string     `gorm:"type:text;not null" json:"-"`
+	Enabled           bool       `gorm:"default:true" json:"enabled"`
+	LastCheckStatus   string     `gorm:"size:32" json:"last_check_status,omitempty"`
+	LastCheckAt       *time.Time `json:"last_check_at,omitempty"`
+	LastCheckError    string     `gorm:"type:text" json:"last_check_error,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+func (UpstreamSyncTarget) TableName() string { return "upstream_sync_targets" }
+
+// UpstreamSyncTargetGroup 是目标 Sub2API 分组缓存。
+//
+// 同一个目标站点内按 (target_id, remote_group_id) upsert
+type UpstreamSyncTargetGroup struct {
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	TargetID      uint       `gorm:"not null;uniqueIndex:idx_upstream_sync_target_group" json:"target_id"`
+	RemoteGroupID int64      `gorm:"not null;uniqueIndex:idx_upstream_sync_target_group" json:"remote_group_id"`
+	Name          string     `gorm:"size:256;not null" json:"name"`
+	Platform      string     `gorm:"size:64" json:"platform,omitempty"`
+	Ratio         float64    `gorm:"not null" json:"ratio"`
+	Status        string     `gorm:"size:32;index" json:"status"`
+	Sort          int        `json:"sort"`
+	Description   string     `gorm:"type:text" json:"description,omitempty"`
+	LastSyncAt    *time.Time `json:"last_sync_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+func (UpstreamSyncTargetGroup) TableName() string { return "upstream_sync_target_groups" }
+
+// UpstreamSyncGroup 保存一组目标分组同步配置。
+//
+// 分组名称和名称模板创建后固定，不允许二次修改，避免远端对象命名漂移。
+type UpstreamSyncGroup struct {
+	ID                       uint       `gorm:"primaryKey" json:"id"`
+	DisplayName              string     `gorm:"size:256;not null;default:''" json:"display_name"`
+	NameTemplate             string     `gorm:"size:256;not null" json:"name_template"`
+	Name                     string     `gorm:"size:256;not null;uniqueIndex" json:"name"`
+	TargetID                 uint       `gorm:"not null;index" json:"target_id"`
+	TargetGroupIDsJSON       string     `gorm:"type:text;not null" json:"target_group_ids"`
+	Platform                 string     `gorm:"size:64;not null" json:"platform"`
+	ModelLimitsMode          string     `gorm:"size:32;not null;default:'sync_upstream'" json:"model_limits_mode"`
+	ModelLimitsText          string     `gorm:"type:text" json:"model_limits,omitempty"`
+	PoolModeEnabled          bool       `gorm:"default:false" json:"pool_mode_enabled"`
+	PoolModeRetryCount       int        `gorm:"default:10" json:"pool_mode_retry_count"`
+	PoolModeRetryStatusCodes string     `gorm:"type:text" json:"pool_mode_retry_status_codes,omitempty"`
+	CustomErrorCodesEnabled  bool       `gorm:"default:false" json:"custom_error_codes_enabled"`
+	CustomErrorCodes         string     `gorm:"type:text" json:"custom_error_codes,omitempty"`
+	RateSortDirection        string     `gorm:"size:16;not null;default:'asc'" json:"rate_sort_direction"`
+	Enabled                  bool       `gorm:"default:true" json:"enabled"`
+	ApplyStatus              string     `gorm:"size:64" json:"apply_status,omitempty"`
+	ApplyError               string     `gorm:"type:text" json:"apply_error,omitempty"`
+	LastAppliedAt            *time.Time `json:"last_applied_at,omitempty"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
+}
+
+func (UpstreamSyncGroup) TableName() string { return "upstream_sync_groups" }
+
+// UpstreamSyncAccount 是同步分组下的一条账号同步配置。
+type UpstreamSyncAccount struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	SyncGroupID      uint      `gorm:"not null;index" json:"sync_group_id"`
+	Position         int       `gorm:"not null;default:0" json:"position"`
+	SourceChannelID  uint      `gorm:"not null;index" json:"source_channel_id"`
+	SourceGroupID    *int64    `json:"source_group_id,omitempty"`
+	SourceGroupName  string    `gorm:"size:256;not null;default:''" json:"source_group_name,omitempty"`
+	ProxyID          *int64    `json:"proxy_id,omitempty"`
+	Concurrency      int       `gorm:"default:10" json:"concurrency"`
+	Weight           int       `gorm:"default:1" json:"weight"`
+	RateConvertMode  string    `gorm:"size:32;not null;default:'raw'" json:"rate_convert_mode"`
+	RateConvertValue float64   `gorm:"default:1" json:"rate_convert_value"`
+	Enabled          bool      `gorm:"default:true" json:"enabled"`
+	TestEnabled      bool      `gorm:"default:false" json:"test_enabled"`
+	TestModel        string    `gorm:"size:256;not null;default:''" json:"test_model,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+func (UpstreamSyncAccount) TableName() string { return "upstream_sync_accounts" }
+
+// UpstreamSyncManagedAccount 记录同步账号在远端生成的两个对象映射，便于幂等更新和删除确认。
+type UpstreamSyncManagedAccount struct {
+	ID                 uint       `gorm:"primaryKey" json:"id"`
+	SyncGroupID        uint       `gorm:"not null;index" json:"sync_group_id"`
+	SyncAccountID      uint       `gorm:"not null;uniqueIndex" json:"sync_account_id"`
+	SourceAPIKeyID     int64      `gorm:"not null" json:"source_api_key_id"`
+	SourceAPIKeyName   string     `gorm:"size:256;not null" json:"source_api_key_name"`
+	TargetAccountID    int64      `gorm:"not null" json:"target_account_id"`
+	TargetAccountName  string     `gorm:"size:256;not null" json:"target_account_name"`
+	TargetGroupIDsJSON string     `gorm:"type:text;not null" json:"target_group_ids"`
+	LastAppliedAt      *time.Time `json:"last_applied_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+}
+
+func (UpstreamSyncManagedAccount) TableName() string { return "upstream_sync_managed_accounts" }
+
+// UpstreamSyncLog 记录同步分组的执行结果。
+type UpstreamSyncLog struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	SyncGroupID uint      `gorm:"not null;index" json:"sync_group_id"`
+	TargetID    uint      `gorm:"not null;index" json:"target_id"`
+	Action      string    `gorm:"size:64;not null;index" json:"action"`
+	Success     bool      `gorm:"not null" json:"success"`
+	Message     string    `gorm:"type:text" json:"message,omitempty"`
+	Detail      string    `gorm:"type:text" json:"detail,omitempty"`
+	CreatedAt   time.Time `gorm:"not null;index" json:"created_at"`
+}
+
+func (UpstreamSyncLog) TableName() string { return "upstream_sync_logs" }

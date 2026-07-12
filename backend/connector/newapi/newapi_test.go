@@ -437,6 +437,8 @@ func TestCreateUpdateDeleteRevealAPIKey(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/token/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"items":[],"total":0,"page":1,"page_size":100,"pages":0}}`))
 		case http.MethodPost:
 			var body map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -459,6 +461,15 @@ func TestCreateUpdateDeleteRevealAPIKey(t *testing.T) {
 			t.Fatalf("unexpected method %s", r.Method)
 		}
 	})
+	mux.HandleFunc("/api/token/search", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want GET", r.Method)
+		}
+		if got := r.URL.Query().Get("keyword"); got != "main" {
+			t.Fatalf("keyword = %q, want main", got)
+		}
+		_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"items":[{"id":9,"status":1,"name":"main","expired_time":-1,"group":"default"}],"total":1,"page":1,"page_size":20,"pages":1}}`))
+	})
 	mux.HandleFunc("/api/token/9", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			t.Fatalf("method = %s, want DELETE", r.Method)
@@ -476,12 +487,15 @@ func TestCreateUpdateDeleteRevealAPIKey(t *testing.T) {
 
 	c := New()
 	session := &connector.AuthSession{Cookie: "session=1", UserID: "7"}
-	_, err := c.CreateAPIKey(context.Background(), &connector.Channel{SiteURL: srv.URL}, session, connector.APIKeyCreateRequest{
+	created, err := c.CreateAPIKey(context.Background(), &connector.Channel{SiteURL: srv.URL}, session, connector.APIKeyCreateRequest{
 		Name:      "main",
 		CustomKey: "sk-custom",
 	})
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if created.ID != 9 {
+		t.Fatalf("created id = %d, want 9", created.ID)
 	}
 	updated, err := c.UpdateAPIKey(context.Background(), &connector.Channel{SiteURL: srv.URL}, session, 9, connector.APIKeyUpdateRequest{
 		Status: strPtr("disabled"),
@@ -501,6 +515,45 @@ func TestCreateUpdateDeleteRevealAPIKey(t *testing.T) {
 	}
 	if key != "sk-full" {
 		t.Fatalf("key = %q", key)
+	}
+}
+
+func TestCreateAPIKeyFallsBackToListWhenSearchMisses(t *testing.T) {
+	mux := http.NewServeMux()
+	listCalls := 0
+	mux.HandleFunc("/api/user/self/groups", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"default":{"ratio":1,"desc":"default"}}}`))
+	})
+	mux.HandleFunc("/api/token/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			_, _ = w.Write([]byte(`{"success":true,"message":""}`))
+		case http.MethodGet:
+			listCalls++
+			if listCalls == 1 {
+				_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"items":[{"id":18,"status":1,"name":"old","expired_time":-1,"group":"default"}],"total":1,"page":1,"page_size":100,"pages":1}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"items":[{"id":19,"status":1,"name":"server-renamed","expired_time":-1,"group":"default"},{"id":18,"status":1,"name":"old","expired_time":-1,"group":"default"}],"total":2,"page":1,"page_size":100,"pages":1}}`))
+		default:
+			t.Fatalf("unexpected method %s", r.Method)
+		}
+	})
+	mux.HandleFunc("/api/token/search", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"items":[],"total":0,"page":1,"page_size":20,"pages":0}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	created, err := New().CreateAPIKey(context.Background(), &connector.Channel{SiteURL: srv.URL}, &connector.AuthSession{
+		Cookie: "session=1",
+		UserID: "7",
+	}, connector.APIKeyCreateRequest{Name: "main"})
+	if err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if created.ID != 19 {
+		t.Fatalf("created id = %d, want 19", created.ID)
 	}
 }
 

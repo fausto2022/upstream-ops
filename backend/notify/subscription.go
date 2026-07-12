@@ -72,7 +72,10 @@ func ParseSubscriptions(raw string) ([]Subscription, error) {
 //   - 倍率相关事件 + mode=groups 时，model_name 必须在 Groups 中
 //   - 其它情况只要上游匹配即放行
 func (s Subscription) Matches(msg Message) bool {
-	if msg.ChannelID == 0 || !s.matchesChannel(msg.ChannelID) {
+	if msg.ChannelID == 0 {
+		return s.matchesEvent(msg.Event)
+	}
+	if !s.matchesChannel(msg.ChannelID) {
 		return false
 	}
 	if !s.matchesEvent(msg.Event) {

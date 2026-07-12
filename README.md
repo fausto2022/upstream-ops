@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh.md)
 
-> UpstreamOps is a centralized monitoring and operations dashboard for NewAPI and Sub2API upstream sites. It helps manage upstream accounts, balances, spending, model or group rates, rate changes, upstream API keys, recharge and redeem workflows, subscriptions, announcements, and notification alerts.
+> UpstreamOps is a centralized monitoring and operations dashboard for NewAPI and Sub2API upstream sites. It helps manage upstream accounts, balances, spending, model or group rates, Sub2API upstream synchronization, rate changes, upstream API keys, recharge and redeem workflows, subscriptions, announcements, and notification alerts.
 
 UpstreamOps is not a model proxy or request forwarding gateway. It is an operations console for maintaining multiple upstream admin panels from one place.
 
@@ -24,7 +24,7 @@ UpstreamOps is not a model proxy or request forwarding gateway. It is an operati
 
 ## Why Use UpstreamOps
 
-When you maintain multiple NewAPI or Sub2API upstream accounts, balance, spending, rates, announcements, API keys, subscriptions, and recharge entry points are usually scattered across different admin panels. Manually logging in one by one is repetitive and can easily miss low balances, rate changes, login failures, expiring subscriptions, or upstream announcements.
+When you maintain multiple NewAPI or Sub2API upstream accounts, balance, spending, rates, announcements, API keys, subscriptions, recharge entry points, and downstream synchronization are usually scattered across different admin panels. Manually logging in one by one is repetitive and can easily miss low balances, rate changes, login failures, expiring subscriptions, or upstream announcements.
 
 UpstreamOps focuses on these problems:
 
@@ -32,7 +32,7 @@ UpstreamOps focuses on these problems:
 - Less manual checking: scheduled balance, spending, rate, and subscription usage synchronization.
 - Faster risk detection: low balances, rate changes, login failures, monitor failures, low subscription quota, and expiring subscriptions can be pushed through notifications.
 - Historical tracking: rate changes, balance snapshots, notification logs, and upstream announcements are stored locally.
-- Easier operations: API key management, recharge, redeem, subscription purchase, and renewal are available from one entry point.
+- Easier operations: API key management, recharge, redeem, subscription purchase, renewal, and Sub2API upstream synchronization are available from one entry point.
 - Complex network support: global proxy support with per-upstream, per-notification-channel, and per-captcha-provider proxy switches.
 
 ## Preview
@@ -66,6 +66,18 @@ UpstreamOps focuses on these problems:
 - Opens upstream site URLs directly from channel cards.
 - Supports clearing saved login information from channel cards.
 - Deleting a channel cleans related snapshots, rates, announcements, notification cooldowns, and notification logs.
+
+### Sub2API Upstream Synchronization
+
+- Adds an **Upstream Sync** tab to system settings for managing writable Sub2API target upstreams.
+- Stores target addresses and encrypted Admin API Keys, checks connectivity, synchronizes target groups, and queries proxy lists.
+- Manages local synchronization groups and accounts by source channel, source group, target group, proxy, concurrency, weight, rate conversion, model limits, pool mode, and custom error codes.
+- Supports upstream model synchronization and custom model lists. Source models can be queried before applying a synchronization group.
+- Supports account testing with a selected model; failed tests disable scheduling for that target account.
+- Supports name templates with `{同步分组ID}`, `{渠道ID}`, and `{源分组ID}` placeholders.
+- Supports manual apply, managed-object deletion, and paginated execution logs.
+- Enabled synchronization groups are reapplied after scheduled rate scans.
+- Synchronization group changes and apply results can trigger `upstream_sync_group_changed` notifications.
 
 ### Balance and Spending Monitoring
 
@@ -200,6 +212,7 @@ The system settings page manages:
 - Proxy connectivity test.
 - Version check result notification.
 - Upstream request timeout and `User-Agent`.
+- Sub2API upstream synchronization targets and groups.
 - Notification channels.
 - Captcha providers.
 
@@ -264,7 +277,7 @@ IMAGE_TAG=latest
 For production, pin a specific version:
 
 ```env
-IMAGE_TAG=v0.0.5
+IMAGE_TAG=v0.0.6
 ```
 
 ## MySQL Deployment
@@ -374,6 +387,8 @@ go test ./...
 
 ```bash
 cd frontend
+pnpm lint
+pnpm exec tsc --noEmit --incremental false
 pnpm build
 ```
 
@@ -590,6 +605,7 @@ Notification channels can limit which upstreams, events, or rate groups they rec
 - `subscription_weekly_remaining_low`: weekly subscription remaining quota below threshold.
 - `subscription_monthly_remaining_low`: monthly subscription remaining quota below threshold.
 - `subscription_expiring`: subscription is about to expire.
+- `upstream_sync_group_changed`: a Sub2API synchronization group or managed account changed.
 
 ## APIs and Operations
 
@@ -653,6 +669,36 @@ POST   /api/captcha-configs/:id/refresh-balance
 DELETE /api/captcha-configs/:id
 ```
 
+Sub2API upstream synchronization targets:
+
+```text
+GET    /api/upstream-sync/targets
+POST   /api/upstream-sync/targets
+PUT    /api/upstream-sync/targets/:id
+DELETE /api/upstream-sync/targets/:id
+POST   /api/upstream-sync/targets/:id/check
+POST   /api/upstream-sync/targets/:id/groups/sync
+GET    /api/upstream-sync/targets/:id/groups
+GET    /api/upstream-sync/targets/:id/proxies
+GET    /api/upstream-sync/source-models?channel_id=1&platform=openai
+```
+
+`channel_id` is required. `platform` defaults to OpenAI-compatible model discovery and also supports `gemini`. Optional filters include `source_group_id`, `source_group_name`, and `sync_account_id`.
+
+Synchronization groups:
+
+```text
+GET    /api/upstream-sync/sync-groups
+POST   /api/upstream-sync/sync-groups
+PUT    /api/upstream-sync/sync-groups/:id
+DELETE /api/upstream-sync/sync-groups/:id
+POST   /api/upstream-sync/sync-groups/:id/apply
+POST   /api/upstream-sync/sync-groups/:id/delete-managed
+GET    /api/upstream-sync/sync-groups/:id/logs?page=1&page_size=20
+```
+
+The target Admin API Key is encrypted at rest. The managed-object action requests deletion of the remote Sub2API account and source-channel API key, clears the local mapping, and leaves target groups unchanged. Deleting a target or synchronization group only removes local records, so run the managed-object action first when remote cleanup is required.
+
 SSE progress endpoints:
 
 ```text
@@ -683,6 +729,7 @@ Default schedules:
 
 - Balance sync: every 15 minutes.
 - Rate sync: every 30 minutes.
+- Enabled Sub2API synchronization groups: reapplied after rate sync.
 - Subscription usage check: runs with balance sync.
 - Captcha balance refresh: scheduled and manual refresh are supported.
 - History cleanup: daily.
@@ -690,6 +737,7 @@ Default schedules:
 Default retention:
 
 - Monitor logs: 30 days.
+- Upstream synchronization logs: follow the monitor log retention period.
 - Balance snapshots: 90 days.
 - Notification logs: 90 days.
 - Upstream announcements: controlled by announcement retention days. `0` disables cleanup.
@@ -702,6 +750,7 @@ The following sensitive fields are encrypted with `APP_SECRET`:
 - Upstream account passwords.
 - NewAPI cookies.
 - Sub2API access tokens.
+- Sub2API target Admin API Keys.
 - Login session cookies and tokens.
 - Notification channel secrets.
 - SMTP passwords.

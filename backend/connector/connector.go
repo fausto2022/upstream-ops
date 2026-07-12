@@ -97,6 +97,7 @@ type CostResult struct {
 
 // RateResult 一条倍率记录。ModelName 在两个上游分别是"分组名"，Description 是该分组的描述（来自上游接口）。
 type RateResult struct {
+	GroupID         *int64
 	ModelName       string
 	Description     string
 	Ratio           float64

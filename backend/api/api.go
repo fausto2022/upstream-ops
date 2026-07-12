@@ -16,6 +16,7 @@ import (
 	"github.com/bejix/upstream-ops/backend/notify"
 	"github.com/bejix/upstream-ops/backend/runtimeconfig"
 	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/bejix/upstream-ops/backend/syncer"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -61,6 +62,7 @@ type Deps struct {
 	ChannelSvc    channelService
 	Monitor       monitorService
 	Dispatcher    *notify.Dispatcher
+	UpstreamSync  *syncer.Service
 	Log           *slog.Logger
 
 	// Frontend 可选：传入嵌入的前端 dist 文件系统。nil 表示不挂载（本地开发用 vite dev server）。
@@ -97,6 +99,7 @@ func Register(r *gin.Engine, d *Deps) {
 		registerMonitorLogs(api, d)
 		registerDashboard(api, d)
 		registerSettings(api, d)
+		registerUpstreamSync(api, d)
 	}
 
 	if d.Frontend != nil {
