@@ -18,6 +18,7 @@ import (
 	"github.com/bejix/upstream-ops/backend/config"
 	"github.com/bejix/upstream-ops/backend/crypto"
 	"github.com/bejix/upstream-ops/backend/logger"
+	"github.com/bejix/upstream-ops/backend/mainstation"
 	"github.com/bejix/upstream-ops/backend/monitor"
 	"github.com/bejix/upstream-ops/backend/notify"
 	"github.com/bejix/upstream-ops/backend/runtimeconfig"
@@ -106,6 +107,7 @@ func main() {
 	upstreamSyncAccounts := storage.NewUpstreamSyncAccounts(db)
 	managedSyncAccounts := storage.NewUpstreamSyncManagedAccounts(db)
 	syncLogs := storage.NewUpstreamSyncLogs(db)
+	mainStationStore := storage.NewMainStationStore(db)
 
 	channelSvc := channel.NewService(channels, authSessions, captchas, rates, monLogs, cipher)
 	channelSvc.UpdateProxyConfig(cfg.Proxy)
@@ -126,9 +128,13 @@ func main() {
 	monitorSvc := monitor.NewService(channels, announcements, rates, monLogs, channelSvc, dispatcher, log)
 	syncSvc := syncer.New(channels, rates, cipher, channelSvc, log, syncTargets, syncGroups, upstreamSyncGroups, upstreamSyncAccounts, managedSyncAccounts, syncLogs)
 	syncSvc.SetDispatcher(dispatcher)
+	mainStationSvc := mainstation.New(mainStationStore, syncTargets, syncGroups, channels, rates, managedSyncAccounts, cipher, channelSvc, log)
+	mainStationSvc.SetDispatcher(dispatcher)
+	mainStationSvc.UpdateProbeConfig(cfg.Proxy, time.Duration(cfg.Upstream.TimeoutSeconds)*time.Second, cfg.Upstream.UserAgent)
+	syncSvc.SetSchedulingGuard(mainStationSvc)
 
 	schedulerFactory := func(scfg config.SchedulerConfig, pcfg config.ProxyConfig) *scheduler.Scheduler {
-		return scheduler.New(scfg, monitorSvc, monLogs, syncLogs, rates, notifies, announcements, captchas, cipher, syncSvc, pcfg, log)
+		return scheduler.New(scfg, monitorSvc, monLogs, syncLogs, rates, notifies, announcements, captchas, cipher, syncSvc, mainStationSvc, pcfg, log)
 	}
 	sch := schedulerFactory(cfg.Scheduler, cfg.Proxy)
 	if err := sch.Start(); err != nil {
@@ -149,6 +155,7 @@ func main() {
 		cfg.Upstream,
 		schedulerFactory,
 	)
+	runtimeMgr.SetProbeConfigUpdater(mainStationSvc)
 
 	gin.SetMode(cfg.Server.Mode)
 	router := gin.New()
@@ -182,6 +189,7 @@ func main() {
 		Monitor:       monitorSvc,
 		Dispatcher:    dispatcher,
 		UpstreamSync:  syncSvc,
+		MainStation:   mainStationSvc,
 		Log:           log,
 		Frontend:      frontendFS,
 	})

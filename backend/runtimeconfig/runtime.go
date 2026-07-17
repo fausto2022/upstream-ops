@@ -16,6 +16,10 @@ import (
 
 type SchedulerFactory func(config.SchedulerConfig, config.ProxyConfig) *scheduler.Scheduler
 
+type ProbeConfigUpdater interface {
+	UpdateProbeConfig(proxy config.ProxyConfig, timeout time.Duration, userAgent string)
+}
+
 type Manager struct {
 	mu               sync.RWMutex
 	configPath       string
@@ -28,6 +32,13 @@ type Manager struct {
 	scheduler        *scheduler.Scheduler
 	proxyConfig      config.ProxyConfig
 	upstreamConfig   config.UpstreamConfig
+	probeUpdater     ProbeConfigUpdater
+}
+
+func (m *Manager) SetProbeConfigUpdater(updater ProbeConfigUpdater) {
+	m.mu.Lock()
+	m.probeUpdater = updater
+	m.mu.Unlock()
 }
 
 type ApplyResult struct {
@@ -117,6 +128,7 @@ func (m *Manager) ApplyFromFile() (*ApplyResult, error) {
 	channelSvc := m.channelSvc
 	factory := m.schedulerFactory
 	oldScheduler := m.scheduler
+	probeUpdater := m.probeUpdater
 	m.mu.RUnlock()
 
 	cfg, err := config.LoadFile(path)
@@ -147,6 +159,9 @@ func (m *Manager) ApplyFromFile() (*ApplyResult, error) {
 	if channelSvc != nil {
 		channelSvc.UpdateProxyConfig(cfg.Proxy)
 		channelSvc.UpdateUpstreamConfig(cfg.Upstream)
+	}
+	if probeUpdater != nil {
+		probeUpdater.UpdateProbeConfig(cfg.Proxy, time.Duration(cfg.Upstream.TimeoutSeconds)*time.Second, cfg.Upstream.UserAgent)
 	}
 
 	newScheduler := factory(cfg.Scheduler, cfg.Proxy)

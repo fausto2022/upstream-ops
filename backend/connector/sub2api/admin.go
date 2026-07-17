@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bejix/upstream-ops/backend/connector"
 )
@@ -27,14 +30,22 @@ type AdminTarget struct {
 }
 
 type AdminGroup struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Platform       string  `json:"platform"`
-	Ratio          float64 `json:"ratio"`
-	RateMultiplier float64 `json:"rate_multiplier"`
-	Status         string  `json:"status"`
-	Sort           int     `json:"sort"`
-	Description    string  `json:"description"`
+	ID                int64           `json:"id"`
+	Name              string          `json:"name"`
+	Platform          string          `json:"platform"`
+	Ratio             float64         `json:"ratio"`
+	RateMultiplier    float64         `json:"rate_multiplier"`
+	Status            string          `json:"status"`
+	Sort              int             `json:"sort"`
+	Description       string          `json:"description"`
+	PeakEnabled       bool            `json:"peak_enabled"`
+	PeakStart         string          `json:"peak_start"`
+	PeakEnd           string          `json:"peak_end"`
+	PeakMultiplier    float64         `json:"peak_multiplier"`
+	SubscriptionType  string          `json:"subscription_type"`
+	ImageSeparateRate bool            `json:"image_separate_rate"`
+	VideoSeparateRate bool            `json:"video_separate_rate"`
+	PricingMetadata   json.RawMessage `json:"pricing_metadata"`
 }
 
 type AdminProxy struct {
@@ -48,20 +59,32 @@ type AdminProxy struct {
 }
 
 type AdminAccount struct {
-	ID             int64          `json:"id"`
-	Name           string         `json:"name"`
-	Platform       string         `json:"platform"`
-	Type           string         `json:"type"`
-	Status         string         `json:"status"`
-	Schedulable    bool           `json:"schedulable,omitempty"`
-	Notes          string         `json:"notes"`
-	ProxyID        *int64         `json:"proxy_id,omitempty"`
-	Concurrency    int            `json:"concurrency"`
-	Priority       int            `json:"priority"`
-	RateMultiplier float64        `json:"rate_multiplier"`
-	LoadFactor     float64        `json:"load_factor"`
-	GroupIDs       []int64        `json:"group_ids"`
-	Credentials    map[string]any `json:"credentials"`
+	ID             int64           `json:"id"`
+	Name           string          `json:"name"`
+	Platform       string          `json:"platform"`
+	Type           string          `json:"type"`
+	Status         string          `json:"status"`
+	Schedulable    bool            `json:"schedulable,omitempty"`
+	Notes          string          `json:"notes"`
+	ProxyID        *int64          `json:"proxy_id,omitempty"`
+	Concurrency    int             `json:"concurrency"`
+	Priority       int             `json:"priority"`
+	Weight         int             `json:"weight"`
+	RateMultiplier float64         `json:"rate_multiplier"`
+	LoadFactor     float64         `json:"load_factor"`
+	GroupIDs       []int64         `json:"group_ids"`
+	Credentials    map[string]any  `json:"credentials"`
+	Extra          json.RawMessage `json:"extra"`
+	LastUsedAt     *time.Time      `json:"last_used_at"`
+	UpdatedAt      *time.Time      `json:"updated_at"`
+}
+
+type AdminAccountPage struct {
+	Items    []AdminAccount `json:"items"`
+	Total    int64          `json:"total"`
+	Page     int            `json:"page"`
+	PageSize int            `json:"page_size"`
+	Pages    int            `json:"pages"`
 }
 
 type AdminAccountTestResult struct {
@@ -78,25 +101,63 @@ func (a *AdminClient) Ping(ctx context.Context, t AdminTarget) error {
 }
 
 func (a *AdminClient) ListGroups(ctx context.Context, t AdminTarget, includeInactive bool) ([]AdminGroup, error) {
+	const pageSize = 100
+	out := make([]AdminGroup, 0)
+	seen := make(map[int64]struct{})
+	for page := 1; page <= 10000; page++ {
+		items, meta, paginated, err := a.listGroupsPage(ctx, t, includeInactive, page, pageSize)
+		if err != nil {
+			return nil, err
+		}
+		added := 0
+		for _, item := range items {
+			if _, ok := seen[item.ID]; ok {
+				continue
+			}
+			seen[item.ID] = struct{}{}
+			out = append(out, item)
+			added++
+		}
+		if !paginated || added == 0 || !adminPageHasNext(meta.Page, meta.PageSize, meta.Pages, meta.Total, len(items)) {
+			break
+		}
+	}
+	normalizeAdminGroupRatios(out)
+	return out, nil
+}
+
+func (a *AdminClient) listGroupsPage(ctx context.Context, t AdminTarget, includeInactive bool, page, pageSize int) ([]AdminGroup, AdminAccountPage, bool, error) {
 	params := url.Values{}
 	params.Set("include_inactive", strconv.FormatBool(includeInactive))
+	params.Set("page", strconv.Itoa(page))
+	params.Set("page_size", strconv.Itoa(pageSize))
 	body, err := a.getJSON(ctx, t, "/api/v1/admin/groups/all?"+params.Encode())
 	if err != nil {
-		return nil, err
+		return nil, AdminAccountPage{}, false, err
 	}
 	var list []AdminGroup
 	if err := json.Unmarshal(body, &list); err == nil {
-		normalizeAdminGroupRatios(list)
-		return list, nil
+		return list, AdminAccountPage{Page: page, PageSize: pageSize, Total: int64(len(list)), Pages: 1}, false, nil
 	}
 	var wrapped struct {
-		Items []AdminGroup `json:"items"`
+		Items    []AdminGroup `json:"items"`
+		Total    int64        `json:"total"`
+		Page     int          `json:"page"`
+		PageSize int          `json:"page_size"`
+		Pages    int          `json:"pages"`
 	}
 	if err := json.Unmarshal(body, &wrapped); err != nil {
-		return nil, fmt.Errorf("decode admin groups: %w", err)
+		return nil, AdminAccountPage{}, false, fmt.Errorf("decode admin groups: %w", err)
 	}
-	normalizeAdminGroupRatios(wrapped.Items)
-	return wrapped.Items, nil
+	if wrapped.Page <= 0 {
+		wrapped.Page = page
+	}
+	if wrapped.PageSize <= 0 {
+		wrapped.PageSize = pageSize
+	}
+	return wrapped.Items, AdminAccountPage{
+		Total: wrapped.Total, Page: wrapped.Page, PageSize: wrapped.PageSize, Pages: wrapped.Pages,
+	}, true, nil
 }
 
 func (a *AdminClient) ListProxies(ctx context.Context, t AdminTarget) ([]AdminProxy, error) {
@@ -111,18 +172,83 @@ func (a *AdminClient) ListProxies(ctx context.Context, t AdminTarget) ([]AdminPr
 	return list, nil
 }
 
+func (a *AdminClient) ListGroupRateMultipliers(ctx context.Context, t AdminTarget, groupID int64) ([]float64, error) {
+	body, err := a.getJSON(ctx, t, "/api/v1/admin/groups/"+strconv.FormatInt(groupID, 10)+"/rate-multipliers")
+	if err != nil {
+		return nil, err
+	}
+	var value any
+	if err := json.Unmarshal(body, &value); err != nil {
+		return nil, fmt.Errorf("decode admin group rate multipliers: %w", err)
+	}
+	return compactPositiveMultipliers(collectRateMultipliers(value)), nil
+}
+
 func (a *AdminClient) ListAccounts(ctx context.Context, t AdminTarget, page, pageSize int) ([]AdminAccount, error) {
+	result, err := a.ListAccountsPage(ctx, t, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (a *AdminClient) ListAccountsPage(ctx context.Context, t AdminTarget, page, pageSize int) (*AdminAccountPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 100
+	}
+	if pageSize > 1000 {
+		pageSize = 1000
+	}
 	body, err := a.getJSON(ctx, t, "/api/v1/admin/accounts?page="+strconv.Itoa(page)+"&page_size="+strconv.Itoa(pageSize))
 	if err != nil {
 		return nil, err
 	}
-	var raw struct {
-		Items []AdminAccount `json:"items"`
+	var direct []AdminAccount
+	if err := json.Unmarshal(body, &direct); err == nil {
+		return &AdminAccountPage{Items: direct, Total: int64(len(direct)), Page: page, PageSize: pageSize, Pages: 1}, nil
 	}
+	var raw AdminAccountPage
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("decode admin accounts: %w", err)
 	}
-	return raw.Items, nil
+	if raw.Page <= 0 {
+		raw.Page = page
+	}
+	if raw.PageSize <= 0 {
+		raw.PageSize = pageSize
+	}
+	if raw.Total == 0 && len(raw.Items) > 0 && raw.Pages <= 1 {
+		raw.Total = int64(len(raw.Items))
+	}
+	return &raw, nil
+}
+
+func (a *AdminClient) ListAllAccounts(ctx context.Context, t AdminTarget) ([]AdminAccount, error) {
+	const pageSize = 100
+	out := make([]AdminAccount, 0)
+	seen := make(map[int64]struct{})
+	for page := 1; page <= 10000; page++ {
+		result, err := a.ListAccountsPage(ctx, t, page, pageSize)
+		if err != nil {
+			return nil, err
+		}
+		added := 0
+		for _, item := range result.Items {
+			if _, ok := seen[item.ID]; ok {
+				continue
+			}
+			seen[item.ID] = struct{}{}
+			out = append(out, item)
+			added++
+		}
+		if added == 0 || !adminPageHasNext(result.Page, result.PageSize, result.Pages, result.Total, len(result.Items)) {
+			break
+		}
+	}
+	return out, nil
 }
 
 func (a *AdminClient) FindGroupByName(ctx context.Context, t AdminTarget, name string) (*AdminGroup, error) {
@@ -139,7 +265,7 @@ func (a *AdminClient) FindGroupByName(ctx context.Context, t AdminTarget, name s
 }
 
 func (a *AdminClient) FindAccountByName(ctx context.Context, t AdminTarget, name string) (*AdminAccount, error) {
-	items, err := a.ListAccounts(ctx, t, 1, 100)
+	items, err := a.ListAllAccounts(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -149,6 +275,18 @@ func (a *AdminClient) FindAccountByName(ctx context.Context, t AdminTarget, name
 		}
 	}
 	return nil, nil
+}
+
+func (a *AdminClient) GetAccount(ctx context.Context, t AdminTarget, id int64) (*AdminAccount, error) {
+	body, err := a.getJSON(ctx, t, "/api/v1/admin/accounts/"+strconv.FormatInt(id, 10))
+	if err != nil {
+		return nil, err
+	}
+	var out AdminAccount
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("decode admin account: %w", err)
+	}
+	return &out, nil
 }
 
 func (a *AdminClient) CreateAccount(ctx context.Context, t AdminTarget, req AdminAccount) (*AdminAccount, error) {
@@ -472,4 +610,71 @@ func normalizeAdminGroupRatios(groups []AdminGroup) {
 			groups[i].Ratio = groups[i].RateMultiplier
 		}
 	}
+}
+
+func adminPageHasNext(page, pageSize, pages int, total int64, itemCount int) bool {
+	if itemCount == 0 {
+		return false
+	}
+	if pages > 0 {
+		return page < pages
+	}
+	if total > 0 && pageSize > 0 {
+		return int64(page*pageSize) < total
+	}
+	return pageSize > 0 && itemCount >= pageSize
+}
+
+func collectRateMultipliers(value any) []float64 {
+	switch typed := value.(type) {
+	case []any:
+		out := make([]float64, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, collectRateMultipliers(item)...)
+		}
+		return out
+	case map[string]any:
+		out := make([]float64, 0)
+		for key, item := range typed {
+			lowerKey := strings.ToLower(strings.TrimSpace(key))
+			if number, ok := item.(float64); ok {
+				if lowerKey == "rate_multiplier" || lowerKey == "multiplier" || lowerKey == "effective_rate_multiplier" || isNumericKey(lowerKey) {
+					out = append(out, number)
+				}
+				continue
+			}
+			if lowerKey == "items" || lowerKey == "data" || lowerKey == "multipliers" || lowerKey == "users" {
+				out = append(out, collectRateMultipliers(item)...)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func compactPositiveMultipliers(values []float64) []float64 {
+	out := make([]float64, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			continue
+		}
+		key := strconv.FormatFloat(value, 'g', -1, 64)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Float64s(out)
+	return out
+}
+
+func isNumericKey(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := strconv.ParseInt(value, 10, 64)
+	return err == nil
 }

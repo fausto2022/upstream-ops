@@ -65,6 +65,17 @@ const eventMeta: Record<NotificationEvent, { icon: LucideIcon; cls: string }> = 
   subscription_monthly_remaining_low: { icon: AlertTriangle, cls: "text-warning" },
   subscription_expiring: { icon: Clock3, cls: "text-warning" },
   upstream_sync_group_changed: { icon: RefreshCw, cls: "text-brand" },
+  main_pool_degraded: { icon: AlertTriangle, cls: "text-warning" },
+  main_pool_critical: { icon: ShieldX, cls: "text-danger" },
+  main_member_health_failed: { icon: ShieldX, cls: "text-danger" },
+  main_member_health_recovered: { icon: RefreshCw, cls: "text-brand" },
+  main_member_margin_risk: { icon: AlertTriangle, cls: "text-warning" },
+  main_member_margin_recovered: { icon: RefreshCw, cls: "text-brand" },
+  main_member_disabled: { icon: ShieldX, cls: "text-danger" },
+  main_member_reenabled: { icon: RefreshCw, cls: "text-brand" },
+  main_member_binding_lost: { icon: ShieldX, cls: "text-danger" },
+  main_station_sync_failed: { icon: RefreshCw, cls: "text-danger" },
+  health_probe_budget_exceeded: { icon: AlertTriangle, cls: "text-warning" },
 }
 
 const FEED_PREVIEW_SIZE = 10

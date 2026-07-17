@@ -41,6 +41,17 @@ export type NotificationEvent =
   | "subscription_monthly_remaining_low"
   | "subscription_expiring"
   | "upstream_sync_group_changed"
+  | "main_pool_degraded"
+  | "main_pool_critical"
+  | "main_member_health_failed"
+  | "main_member_health_recovered"
+  | "main_member_margin_risk"
+  | "main_member_margin_recovered"
+  | "main_member_disabled"
+  | "main_member_reenabled"
+  | "main_member_binding_lost"
+  | "main_station_sync_failed"
+  | "health_probe_budget_exceeded"
 
 export interface Channel {
   id: number
@@ -573,4 +584,292 @@ export interface UpstreamSyncLogPage {
   page: number
   page_size: number
   pages: number
+}
+
+export interface MainStationMigrationState {
+  status: string
+  detail?: string
+}
+
+export interface MainStationConfig {
+  configured: boolean
+  id?: number
+  target_id?: number
+  name?: string
+  base_url?: string
+  has_admin_api_key: boolean
+  enabled: boolean
+  last_sync_status?: string
+  last_sync_at?: string | null
+  last_sync_error?: string
+  auto_margin_protection: boolean
+  auto_health_protection: boolean
+  auto_recovery: boolean
+  observation_evaluated_at?: string | null
+  health_observed_at?: string | null
+  margin_observed_at?: string | null
+  migration?: MainStationMigrationState
+}
+
+export interface MainStationGroup extends UpstreamSyncTargetGroup {
+  rate_multiplier_micros: number
+  peak_enabled: boolean
+  peak_start?: string
+  peak_end?: string
+  peak_multiplier_micros: number
+  subscription_type?: string
+  image_separate_rate: boolean
+  video_separate_rate: boolean
+  pricing_metadata?: string
+  user_min_rate_micros?: number | null
+  user_rates_complete: boolean
+  missing: boolean
+}
+
+export interface MainStationAccount {
+  id: number
+  main_station_id: number
+  remote_account_id: number
+  name: string
+  notes?: string
+  platform?: string
+  type?: string
+  status: string
+  schedulable: boolean
+  concurrency: number
+  priority: number
+  weight: number
+  rate_multiplier_micros: number
+  group_ids: string
+  base_url?: string
+  credentials_present: boolean
+  billing_probe?: string
+  last_used_at?: string | null
+  remote_updated_at?: string | null
+  last_sync_at: string
+  missing: boolean
+  bound_member_id?: number | null
+}
+
+export interface MainStationMember {
+  id: number
+  pool_id: number
+  legacy_sync_account_id?: number | null
+  source_channel_id: number
+  source_group_id?: number | null
+  source_group_name?: string
+  source_api_key_id?: number | null
+  remote_account_id?: number | null
+  remote_account_name?: string
+  ownership_mode: "managed" | "bound"
+  binding_status: "pending" | "verified" | "manual_confirmed" | "invalid" | "orphaned"
+  status: "pending" | "active" | "degraded" | "quarantined" | "disabled" | "orphaned" | "error"
+  enabled: boolean
+  proxy_id?: number | null
+  weight: number
+  priority: number
+  concurrency: number
+  rate_convert_mode: UpstreamSyncRateConvertMode
+  rate_convert_value_micros: number
+  cost_adjustment_micros: number
+  manual_cost_micros?: number | null
+  health_enabled: boolean
+  health_model?: string
+  health_api_mode: string
+  last_health_status: string
+  last_health_at?: string | null
+  consecutive_health_success: number
+  consecutive_health_failure: number
+  cooldown_until?: string | null
+  last_cost_micros?: number | null
+  last_cost_source?: string
+  last_cost_at?: string | null
+  last_cost_expires_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface MainStationPool {
+  id: number
+  legacy_sync_group_id?: number | null
+  name: string
+  description?: string
+  platform?: string
+  enabled: boolean
+  minimum_healthy_members: number
+  minimum_effective_concurrency: number
+  rate_sort_direction: "asc" | "desc"
+  health_policy: string
+  margin_policy: string
+  last_status: "healthy" | "degraded" | "critical" | "unknown" | string
+  last_evaluated_at?: string | null
+  created_at: string
+  updated_at: string
+  target_group_ids: number[]
+  groups: MainStationGroup[]
+  members: MainStationMember[]
+}
+
+export interface MainStationPage<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface MainStationSyncResult {
+  groups: number
+  accounts: number
+  missing_groups: number[]
+  missing_accounts: number[]
+  orphaned_members: number
+  synced_at: string
+}
+
+export interface MainStationHealthCheck {
+  id: number
+  pool_id: number
+  member_id: number
+  remote_account_id: number
+  level: "L0" | "L1" | "L2" | string
+  protocol?: string
+  model?: string
+  endpoint?: string
+  status: string
+  error_class?: string
+  http_status?: number
+  latency_ms: number
+  input_tokens?: number | null
+  output_tokens?: number | null
+  total_tokens?: number | null
+  estimated_cost_micros?: number | null
+  message?: string
+  triggered_action?: string
+  started_at: string
+  finished_at: string
+  created_at: string
+}
+
+export interface MainStationHealthStats {
+  member_id: number
+  last_status: string
+  consecutive_success: number
+  consecutive_failure: number
+  recent_20_success_rate?: number | null
+  one_hour_success_rate?: number | null
+  twenty_four_hour_success_rate?: number | null
+  seven_day_success_rate?: number | null
+  average_latency_ms?: number | null
+  p50_latency_ms?: number | null
+  p95_latency_ms?: number | null
+  last_success_at?: string | null
+  last_failure_at?: string | null
+  last_error_class?: string
+  last_error_message?: string
+  daily_checks: number
+  daily_tokens: number
+}
+
+export interface MainStationHealthBudget {
+  daily_l1_used: number
+  daily_l1_limit: number
+  daily_l2_used: number
+  daily_l2_limit: number
+  daily_tokens: number
+  token_limit: number
+}
+
+export interface MainStationMemberHealthSummary {
+  member: MainStationMember
+  stats: MainStationHealthStats
+  budget: MainStationHealthBudget
+}
+
+export interface MainStationProfitCheck {
+  id: number
+  pool_id: number
+  member_id: number
+  target_group_id: number
+  sale_multiplier_micros: number
+  cost_multiplier_micros: number
+  cost_adjustment_micros: number
+  margin_value_micros: number
+  margin_basis_points: number
+  sale_source?: string
+  cost_source?: string
+  status: "healthy" | "risk" | "unknown" | "unsupported" | string
+  reason?: string
+  observed_at: string
+  created_at: string
+}
+
+export interface MainStationGuardLock {
+  id: number
+  remote_account_id: number
+  member_id: number
+  lock_type: "manual" | "margin" | "health" | "sync" | "credential" | "binding" | string
+  active: boolean
+  reason?: string
+  evidence?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  cleared_at?: string | null
+  cleared_by?: string
+}
+
+export interface MainStationPoolEvaluation {
+  pool_id: number
+  checks: MainStationProfitCheck[]
+  healthy: number
+  risk: number
+  unknown: number
+  unsupported: number
+  would_disable_member_ids: number[]
+  protection_applied_member_ids: number[]
+  evaluated_at: string
+}
+
+export interface MainStationProtectionPreview {
+  health_ready: boolean
+  margin_ready: boolean
+  unhealthy_member_ids: number[]
+  margin_risk_member_ids: number[]
+  schedulable_account_ids: number[]
+  active_locks: MainStationGuardLock[]
+}
+
+export interface MainStationPoolCapacity {
+  pool_id: number
+  status: string
+  total_members: number
+  healthy_members: number
+  profitable_members: number
+  qualified_members: number
+  schedulable_members: number
+  effective_concurrency: number
+}
+
+export interface MainStationBulkOperation {
+  attempted: number
+  succeeded: number
+  skipped: number
+  errors: string[]
+}
+
+export interface MainStationAuditLog {
+  id: number
+  pool_id?: number | null
+  member_id?: number | null
+  remote_account_id?: number | null
+  action: string
+  source: string
+  success: boolean
+  before?: string
+  after?: string
+  evidence?: string
+  detail?: string
+  error_message?: string
+  created_at: string
 }

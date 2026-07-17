@@ -79,6 +79,15 @@ UpstreamOps focuses on these problems:
 - Enabled synchronization groups are reapplied after scheduled rate scans.
 - Synchronization group changes and apply results can trigger `upstream_sync_group_changed` notifications.
 
+### Main-Station Account Pools, Health, and Cost Protection
+
+- A first-level **Main Station** workspace manages one Sub2API main station, group and Account snapshots, and logical account pools.
+- Each member binds one dedicated remote Account through managed creation or explicit binding. Missing remote resources remain in history and become orphaned.
+- Supports zero-generation L0 probes, output-limited low-token L1 probes, Account-ID-specific L2 tests, success windows, and P50/P95 latency.
+- Uses fixed-point conservative sale, cost, and margin calculations. Complex or stale pricing remains unknown/unsupported and cannot trigger automatic disabling.
+- Independent `manual`, `margin`, `health`, `sync`, `credential`, and `binding` locks feed one audited remote scheduling decision.
+- Automatic margin protection, health protection, and recovery are off by default. They require observation evidence before enablement and can be returned to notify-only mode.
+
 ### Balance and Spending Monitoring
 
 - Shows total balance, today spending, total spending, lowest-balance channel, and abnormal channel count.
@@ -244,7 +253,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-a-strong-password
 ```
 
-Docker pulls `ghcr.io/bejix/upstream-ops:${IMAGE_TAG:-latest}` by default. Configuration and data are stored in the host `data/` directory.
+Docker pulls `ghcr.io/fausto2022/upstream-ops:${IMAGE_TAG:-latest}` by default. Configuration and data are stored in the host `data/` directory.
 
 Start:
 
@@ -298,6 +307,51 @@ MYSQL_PASSWORD=replace-with-database-password
 MYSQL_ROOT_PASSWORD=replace-with-root-password
 MYSQL_PORT=33069
 ```
+
+## Upgrade, Backup, and Rollback
+
+The application runs forward-compatible GORM migrations on startup. Legacy Sub2API synchronization data is retained: a single target is migrated idempotently into a main-station pool, while multiple targets require explicit selection on the **Main Station** page. Automatic protection remains disabled after an upgrade.
+
+### SQLite Upgrade
+
+Stop writes, back up the database, runtime configuration, and environment, then pull the pinned image:
+
+```bash
+docker compose stop app
+cp data/upstream-ops.db data/upstream-ops.db.before-upgrade
+cp data/config.yaml data/config.yaml.before-upgrade
+cp .env .env.before-upgrade
+docker compose pull app
+docker compose up -d app
+docker compose ps
+curl -fsS http://localhost:${HTTP_PORT:-8080}/healthz
+```
+
+Pin `IMAGE_TAG` in `.env` for production and change it to the intended release during upgrades. Keep `APP_SECRET` unchanged, or existing main-station Admin API Keys and other encrypted values cannot be decrypted.
+
+### MySQL Upgrade
+
+Dump the database before upgrading the application, and do not delete the `mysql-data` volume:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml stop app
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml exec -T mysql \
+  sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > upstreamops-before-upgrade.sql
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml pull app
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d app
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml ps
+curl -fsS http://localhost:${HTTP_PORT:-8080}/healthz
+```
+
+### Rollback
+
+1. Change `IMAGE_TAG` in `.env` back to the previously pinned tag.
+2. Run `docker compose pull app` and `docker compose up -d app` with the compose files for the active database mode.
+3. Keep new tables and columns in place; older binaries ignore them. Do not run manual downgrade DDL.
+4. Restore the SQLite backup or MySQL dump only after stopping all writers and only when data rollback is required. Database restoration discards post-upgrade account-pool, lock, and audit changes.
+5. Keep automatic protection disabled during rollback. Verify `/healthz`, main-station configuration, pool bindings, and lock state before re-enabling policies.
+
+`.github/workflows/publish.yml` builds `linux/amd64` and `linux/arm64` images for `v*.*.*` tags and publishes them to `ghcr.io/fausto2022/upstream-ops`. For local verification, run `docker build -t upstream-ops:verify .` from the repository root so the frontend assets are embedded.
 
 ## Environment Variables
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, Github, Home, LogOut, RefreshCw, Sun, Moon, Settings } from "lucide-react"
+import { Activity, Github, Home, LogOut, RefreshCw, ServerCog, Sun, Moon, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -107,7 +107,7 @@ export function MonitorHeader() {
                 </button>
                 {updateAvailable ? (
                   <a
-                    href={updateURL || "https://github.com/bejix/upstream-ops"}
+                    href={updateURL || "https://github.com/fausto2022/upstream-ops"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-2 font-medium text-emerald-600 underline-offset-2 hover:text-emerald-700 hover:underline"
@@ -187,6 +187,24 @@ export function MonitorHeader() {
             </TooltipContent>
           </Tooltip>
 
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/main-station")}
+                className="h-8 gap-1.5 border-border bg-background px-2 text-foreground hover:bg-muted"
+                aria-label="主站"
+              >
+                <ServerCog className="size-3.5" />
+                <span className="hidden lg:inline">主站</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {"主站账号池"}
+            </TooltipContent>
+          </Tooltip>
+
           {/* settings */}
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
@@ -215,7 +233,7 @@ export function MonitorHeader() {
                 aria-label="GitHub 仓库"
               >
                 <a
-                  href="https://github.com/bejix/upstream-ops"
+                  href="https://github.com/fausto2022/upstream-ops"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -224,7 +242,7 @@ export function MonitorHeader() {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
-              {"GitHub · bejix/upstream-ops"}
+              {"GitHub · fausto2022/upstream-ops"}
             </TooltipContent>
           </Tooltip>
 

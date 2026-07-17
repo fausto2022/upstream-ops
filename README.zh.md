@@ -83,6 +83,15 @@ UpstreamOps 主要解决这些痛点：
 - 倍率定时扫描完成后会自动重新应用已启用的同步分组。
 - 同步分组变更和应用结果可通过 `upstream_sync_group_changed` 事件通知。
 
+### 主站账号池、测活与成本保护
+
+- 一级“主站”工作台管理唯一 Sub2API 主站、主站分组、Account 快照和逻辑账号池。
+- 每个池成员独立绑定一个远端 Account，支持托管创建或绑定已有 Account；远端资源消失时保留历史并标记为 orphaned。
+- 支持 L0 零生成探测、受控输出的 L1 低 Token 探测、按 Account ID 执行的 L2 主站链路测试，以及成功率和 P50/P95 统计。
+- 使用定点数保守核算销售倍率、成本倍率和利润率；复杂或过期计费数据保持 unknown/unsupported，不触发自动停用。
+- `manual`、`margin`、`health`、`sync`、`credential`、`binding` 六类调度锁互相独立，所有远端调度写入经过统一决策和审计。
+- 自动利润保护、自动健康保护和自动恢复默认关闭，完成观察评估后才可手工开启，并可一键切回只通知模式。
+
 ### 余额与消费监控
 
 - 首页展示总余额、今日消费、累计消费、最低余额渠道、异常渠道数量。
@@ -257,7 +266,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=请替换为强密码
 ```
 
-Docker 默认拉取 `ghcr.io/bejix/upstream-ops:${IMAGE_TAG:-latest}`，不会在本机编译镜像。配置和数据都会写入宿主机项目目录下的 `data/`。
+Docker 默认拉取 `ghcr.io/fausto2022/upstream-ops:${IMAGE_TAG:-latest}`，不会在本机编译镜像。配置和数据都会写入宿主机项目目录下的 `data/`。
 
 启动：
 
@@ -311,6 +320,51 @@ MYSQL_PASSWORD=请替换为数据库密码
 MYSQL_ROOT_PASSWORD=请替换为 root 密码
 MYSQL_PORT=33069
 ```
+
+## 升级、备份与回滚
+
+应用启动时执行向前兼容的 GORM 迁移。旧版 Sub2API 同步数据不会删除：只有一个目标站点时会幂等迁移为主站账号池；存在多个目标站点时，必须在“主站”页面人工确认目标。升级后自动保护仍保持关闭。
+
+### SQLite 升级
+
+先停止写入并备份数据库、运行时配置和环境变量，然后拉取指定镜像：
+
+```bash
+docker compose stop app
+cp data/upstream-ops.db data/upstream-ops.db.before-upgrade
+cp data/config.yaml data/config.yaml.before-upgrade
+cp .env .env.before-upgrade
+docker compose pull app
+docker compose up -d app
+docker compose ps
+curl -fsS http://localhost:${HTTP_PORT:-8080}/healthz
+```
+
+生产环境应在 `.env` 中固定 `IMAGE_TAG`。升级时将其改为目标版本，而不是长期使用 `latest`。`APP_SECRET` 必须保持不变，否则主站 Admin API Key 和其他既有密文无法解密。
+
+### MySQL 升级
+
+先导出数据库，再升级应用；不要删除 `mysql-data` 卷：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml stop app
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml exec -T mysql \
+  sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > upstreamops-before-upgrade.sql
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml pull app
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d app
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml ps
+curl -fsS http://localhost:${HTTP_PORT:-8080}/healthz
+```
+
+### 回滚
+
+1. 在 `.env` 中把 `IMAGE_TAG` 改回升级前的固定 Tag。
+2. 运行与当前数据库模式对应的 `docker compose pull app` 和 `docker compose up -d app`。
+3. 新表和新增列可以保留，旧程序会忽略它们；不要手工执行降级 DDL。
+4. 只有确认必须回退数据时，才在停止所有写入后恢复升级前的 SQLite 文件或 MySQL dump。恢复数据库会丢失升级后的账号池、锁和审计变更。
+5. 回滚期间保持自动保护关闭，确认 `/healthz`、主站配置和账号池锁状态后再恢复自动策略。
+
+本仓库的 `.github/workflows/publish.yml` 会在 `v*.*.*` Tag 上构建 `linux/amd64` 和 `linux/arm64` 镜像并推送到 `ghcr.io/fausto2022/upstream-ops`。本地验证镜像使用 `docker build -t upstream-ops:verify .`，构建上下文必须是仓库根目录。
 
 ## 环境变量
 

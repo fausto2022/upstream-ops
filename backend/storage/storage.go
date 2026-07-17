@@ -118,7 +118,7 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := dropDeletedAtColumns(db); err != nil {
 		return err
 	}
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&Channel{},
 		&AuthSession{},
 		&CaptchaConfig{},
@@ -137,7 +137,21 @@ func AutoMigrate(db *gorm.DB) error {
 		&UpstreamSyncAccount{},
 		&UpstreamSyncManagedAccount{},
 		&UpstreamSyncLog{},
-	)
+		&MainStationConfig{},
+		&MainStationMigrationState{},
+		&MainStationAccountSnapshot{},
+		&MainAccountPool{},
+		&MainAccountPoolGroup{},
+		&MainAccountPoolMember{},
+		&MainAccountHealthCheck{},
+		&MainAccountProfitCheck{},
+		&MainAccountGuardLock{},
+		&MainAccountAuditLog{},
+		&MainStationNotificationCooldown{},
+	); err != nil {
+		return err
+	}
+	return migrateLegacyMainStationData(db)
 }
 
 func dropDeletedAtColumns(db *gorm.DB) error {

@@ -3,6 +3,7 @@ package syncer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/bejix/upstream-ops/backend/connector"
+	"github.com/bejix/upstream-ops/backend/connector/sub2api"
 	"github.com/bejix/upstream-ops/backend/crypto"
 	"github.com/bejix/upstream-ops/backend/notify"
 	"github.com/bejix/upstream-ops/backend/storage"
@@ -2140,6 +2142,58 @@ func TestSyncTargetGroupsDeletesLocalGroupsWhenRemoteIsEmpty(t *testing.T) {
 	}
 	if len(stored) != 0 {
 		t.Fatalf("local groups len = %d, want 0", len(stored))
+	}
+}
+
+type lockAwareSchedulingGuard struct {
+	managed          bool
+	manualLockActive bool
+	syncLockActive   bool
+	clearCalls       []string
+	reconcileCalls   int
+}
+
+func (g *lockAwareSchedulingGuard) IsManagedAccount(int64) bool {
+	return g.managed
+}
+
+func (g *lockAwareSchedulingGuard) ActivateSchedulingLock(context.Context, int64, string, string, any, string) error {
+	return nil
+}
+
+func (g *lockAwareSchedulingGuard) ClearSchedulingLock(_ context.Context, _ int64, lockType, _ string) error {
+	g.clearCalls = append(g.clearCalls, lockType)
+	if lockType == "sync" {
+		g.syncLockActive = false
+	}
+	return nil
+}
+
+func (g *lockAwareSchedulingGuard) ReconcileScheduling(context.Context, int64, string) error {
+	g.reconcileCalls++
+	if !g.manualLockActive {
+		return errors.New("test requires another active lock")
+	}
+	return nil
+}
+
+func TestRestoreManagedRemoteAccountUsesGuardWithAnotherActiveLock(t *testing.T) {
+	svc := &Service{}
+	guard := &lockAwareSchedulingGuard{
+		managed:          true,
+		manualLockActive: true,
+		syncLockActive:   true,
+	}
+	svc.SetSchedulingGuard(guard)
+
+	if err := svc.restoreManagedRemoteAccount(context.Background(), sub2api.AdminTarget{}, nil, 42); err != nil {
+		t.Fatalf("restore managed account: %v", err)
+	}
+	if len(guard.clearCalls) != 1 || guard.clearCalls[0] != "sync" {
+		t.Fatalf("clear calls = %#v", guard.clearCalls)
+	}
+	if guard.reconcileCalls != 1 || !guard.manualLockActive || guard.syncLockActive {
+		t.Fatalf("guard state = %#v", guard)
 	}
 }
 

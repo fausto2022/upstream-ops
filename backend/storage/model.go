@@ -216,20 +216,31 @@ func (NotificationChannel) TableName() string { return "notification_channels" }
 type NotificationEvent string
 
 const (
-	EventBalanceLow               NotificationEvent = "balance_low"
-	EventRateChanged              NotificationEvent = "rate_changed"
-	EventRateStructureChanged     NotificationEvent = "rate_structure_changed"
-	EventRateAdded                NotificationEvent = "rate_added"
-	EventRateRemoved              NotificationEvent = "rate_removed"
-	EventAnnouncement             NotificationEvent = "announcement"
-	EventLoginFailed              NotificationEvent = "login_failed"
-	EventCaptchaFailed            NotificationEvent = "captcha_failed"
-	EventMonitorFailed            NotificationEvent = "monitor_failed"
-	EventSubscriptionDailyLow     NotificationEvent = "subscription_daily_remaining_low"
-	EventSubscriptionWeeklyLow    NotificationEvent = "subscription_weekly_remaining_low"
-	EventSubscriptionMonthlyLow   NotificationEvent = "subscription_monthly_remaining_low"
-	EventSubscriptionExpiring     NotificationEvent = "subscription_expiring"
-	EventUpstreamSyncGroupChanged NotificationEvent = "upstream_sync_group_changed"
+	EventBalanceLow                NotificationEvent = "balance_low"
+	EventRateChanged               NotificationEvent = "rate_changed"
+	EventRateStructureChanged      NotificationEvent = "rate_structure_changed"
+	EventRateAdded                 NotificationEvent = "rate_added"
+	EventRateRemoved               NotificationEvent = "rate_removed"
+	EventAnnouncement              NotificationEvent = "announcement"
+	EventLoginFailed               NotificationEvent = "login_failed"
+	EventCaptchaFailed             NotificationEvent = "captcha_failed"
+	EventMonitorFailed             NotificationEvent = "monitor_failed"
+	EventSubscriptionDailyLow      NotificationEvent = "subscription_daily_remaining_low"
+	EventSubscriptionWeeklyLow     NotificationEvent = "subscription_weekly_remaining_low"
+	EventSubscriptionMonthlyLow    NotificationEvent = "subscription_monthly_remaining_low"
+	EventSubscriptionExpiring      NotificationEvent = "subscription_expiring"
+	EventUpstreamSyncGroupChanged  NotificationEvent = "upstream_sync_group_changed"
+	EventMainPoolDegraded          NotificationEvent = "main_pool_degraded"
+	EventMainPoolCritical          NotificationEvent = "main_pool_critical"
+	EventMainMemberHealthFailed    NotificationEvent = "main_member_health_failed"
+	EventMainMemberHealthRecovered NotificationEvent = "main_member_health_recovered"
+	EventMainMemberMarginRisk      NotificationEvent = "main_member_margin_risk"
+	EventMainMemberMarginRecovered NotificationEvent = "main_member_margin_recovered"
+	EventMainMemberDisabled        NotificationEvent = "main_member_disabled"
+	EventMainMemberReenabled       NotificationEvent = "main_member_reenabled"
+	EventMainMemberBindingLost     NotificationEvent = "main_member_binding_lost"
+	EventMainStationSyncFailed     NotificationEvent = "main_station_sync_failed"
+	EventHealthProbeBudgetExceeded NotificationEvent = "health_probe_budget_exceeded"
 )
 
 // NotificationLog 通知发送记录。
@@ -312,18 +323,30 @@ func (UpstreamSyncTarget) TableName() string { return "upstream_sync_targets" }
 //
 // 同一个目标站点内按 (target_id, remote_group_id) upsert
 type UpstreamSyncTargetGroup struct {
-	ID            uint       `gorm:"primaryKey" json:"id"`
-	TargetID      uint       `gorm:"not null;uniqueIndex:idx_upstream_sync_target_group" json:"target_id"`
-	RemoteGroupID int64      `gorm:"not null;uniqueIndex:idx_upstream_sync_target_group" json:"remote_group_id"`
-	Name          string     `gorm:"size:256;not null" json:"name"`
-	Platform      string     `gorm:"size:64" json:"platform,omitempty"`
-	Ratio         float64    `gorm:"not null" json:"ratio"`
-	Status        string     `gorm:"size:32;index" json:"status"`
-	Sort          int        `json:"sort"`
-	Description   string     `gorm:"type:text" json:"description,omitempty"`
-	LastSyncAt    *time.Time `json:"last_sync_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID                   uint       `gorm:"primaryKey" json:"id"`
+	TargetID             uint       `gorm:"not null;uniqueIndex:idx_upstream_sync_target_group" json:"target_id"`
+	RemoteGroupID        int64      `gorm:"not null;uniqueIndex:idx_upstream_sync_target_group" json:"remote_group_id"`
+	Name                 string     `gorm:"size:256;not null" json:"name"`
+	Platform             string     `gorm:"size:64" json:"platform,omitempty"`
+	Ratio                float64    `gorm:"not null" json:"ratio"`
+	RateMultiplierMicros int64      `gorm:"not null;default:0" json:"rate_multiplier_micros"`
+	Status               string     `gorm:"size:32;index" json:"status"`
+	Sort                 int        `json:"sort"`
+	Description          string     `gorm:"type:text" json:"description,omitempty"`
+	PeakEnabled          bool       `gorm:"not null;default:false" json:"peak_enabled"`
+	PeakStart            string     `gorm:"size:32" json:"peak_start,omitempty"`
+	PeakEnd              string     `gorm:"size:32" json:"peak_end,omitempty"`
+	PeakMultiplierMicros int64      `gorm:"not null;default:0" json:"peak_multiplier_micros"`
+	SubscriptionType     string     `gorm:"size:64" json:"subscription_type,omitempty"`
+	ImageSeparateRate    bool       `gorm:"not null;default:false" json:"image_separate_rate"`
+	VideoSeparateRate    bool       `gorm:"not null;default:false" json:"video_separate_rate"`
+	PricingMetadataJSON  string     `gorm:"type:text" json:"pricing_metadata,omitempty"`
+	UserMinRateMicros    *int64     `json:"user_min_rate_micros,omitempty"`
+	UserRatesComplete    bool       `gorm:"not null;default:false" json:"user_rates_complete"`
+	Missing              bool       `gorm:"not null;default:false;index" json:"missing"`
+	LastSyncAt           *time.Time `json:"last_sync_at,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
 func (UpstreamSyncTargetGroup) TableName() string { return "upstream_sync_target_groups" }

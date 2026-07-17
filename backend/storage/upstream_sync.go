@@ -110,13 +110,45 @@ func (r *UpstreamSyncTargetGroups) Upsert(item *UpstreamSyncTargetGroup) error {
 			"name",
 			"platform",
 			"ratio",
+			"rate_multiplier_micros",
 			"status",
 			"sort",
 			"description",
+			"peak_enabled",
+			"peak_start",
+			"peak_end",
+			"peak_multiplier_micros",
+			"subscription_type",
+			"image_separate_rate",
+			"video_separate_rate",
+			"pricing_metadata_json",
+			"user_min_rate_micros",
+			"user_rates_complete",
+			"missing",
 			"last_sync_at",
 			"updated_at",
 		}),
 	}).Create(item).Error
+}
+
+func (r *UpstreamSyncTargetGroups) MarkMissing(targetID uint, remoteIDs []int64, at time.Time) ([]int64, error) {
+	var missing []int64
+	q := r.db.Model(&UpstreamSyncTargetGroup{}).Where("target_id = ? AND missing = ?", targetID, false)
+	if len(remoteIDs) > 0 {
+		q = q.Where("remote_group_id NOT IN ?", remoteIDs)
+	}
+	if err := q.Pluck("remote_group_id", &missing).Error; err != nil {
+		return nil, err
+	}
+	if len(missing) == 0 {
+		return missing, nil
+	}
+	if err := r.db.Model(&UpstreamSyncTargetGroup{}).
+		Where("target_id = ? AND remote_group_id IN ?", targetID, missing).
+		Updates(map[string]any{"missing": true, "status": "missing", "last_sync_at": at}).Error; err != nil {
+		return nil, err
+	}
+	return missing, nil
 }
 
 func (r *UpstreamSyncTargetGroups) DeleteMissing(targetID uint, remoteIDs []int64) error {

@@ -30,6 +30,13 @@ type channelSvc interface {
 	ListAPIKeyGroups(ctx context.Context, channelID uint) ([]connector.APIKeyGroup, error)
 }
 
+type schedulingGuard interface {
+	IsManagedAccount(remoteAccountID int64) bool
+	ActivateSchedulingLock(ctx context.Context, remoteAccountID int64, lockType, reason string, evidence any, source string) error
+	ClearSchedulingLock(ctx context.Context, remoteAccountID int64, lockType, clearedBy string) error
+	ReconcileScheduling(ctx context.Context, remoteAccountID int64, source string) error
+}
+
 type Service struct {
 	channels   *storage.Channels
 	rates      *storage.Rates
@@ -37,6 +44,7 @@ type Service struct {
 	channelSvc channelSvc
 	log        *slog.Logger
 	dispatcher *notify.Dispatcher
+	guard      schedulingGuard
 
 	targets         *storage.UpstreamSyncTargets
 	groups          *storage.UpstreamSyncTargetGroups
@@ -76,6 +84,10 @@ func New(
 
 func (s *Service) SetDispatcher(dispatcher *notify.Dispatcher) {
 	s.dispatcher = dispatcher
+}
+
+func (s *Service) SetSchedulingGuard(guard schedulingGuard) {
+	s.guard = guard
 }
 
 type TargetDTO struct {
@@ -669,7 +681,7 @@ func (s *Service) ApplySyncGroup(ctx context.Context, syncGroupID uint) (*LogDTO
 		_ = s.syncGroups.UpdateStatus(syncGroup.ID, "failed", err.Error(), nil)
 		return s.appendLog(syncGroup.ID, target.ID, "apply", false, err.Error())
 	}
-	remoteAccounts, err := client.ListAccounts(ctx, adminTarget, 1, 1000)
+	remoteAccounts, err := client.ListAllAccounts(ctx, adminTarget)
 	if err != nil {
 		_ = s.syncGroups.UpdateStatus(syncGroup.ID, "failed", err.Error(), nil)
 		return s.appendLog(syncGroup.ID, target.ID, "apply", false, err.Error())
@@ -1113,10 +1125,18 @@ func (s *Service) testManagedTargetAccount(
 	}
 	model := strings.TrimSpace(syncAccount.TestModel)
 	if model == "" {
+		if s.guard != nil && s.guard.IsManagedAccount(account.ID) {
+			err := errors.New("account test model is not configured")
+			change := testRemoteAccountChange(syncAccount, account.Name, account.ID, "", false, err.Error())
+			if protectErr := s.protectManagedRemoteAccount(ctx, adminTarget, client, account.ID, err.Error()); protectErr != nil {
+				return "", "", protectErr
+			}
+			return fmt.Sprintf("测试配置异常，调度已保护：%s", err.Error()), change, nil
+		}
 		models, err := client.ListAccountModels(ctx, adminTarget, account.ID)
 		if err != nil {
 			change := testRemoteAccountChange(syncAccount, account.Name, account.ID, "", false, err.Error())
-			if _, setErr := client.SetAccountSchedulable(ctx, adminTarget, account.ID, false); setErr != nil {
+			if setErr := s.protectManagedRemoteAccount(ctx, adminTarget, client, account.ID, err.Error()); setErr != nil {
 				return "", "", setErr
 			}
 			return fmt.Sprintf("测试失败，调度已禁用：%s", err.Error()), change, nil
@@ -1124,7 +1144,7 @@ func (s *Service) testManagedTargetAccount(
 		if len(models) == 0 {
 			err := errors.New("account models is empty")
 			change := testRemoteAccountChange(syncAccount, account.Name, account.ID, "", false, err.Error())
-			if _, setErr := client.SetAccountSchedulable(ctx, adminTarget, account.ID, false); setErr != nil {
+			if setErr := s.protectManagedRemoteAccount(ctx, adminTarget, client, account.ID, err.Error()); setErr != nil {
 				return "", "", setErr
 			}
 			return fmt.Sprintf("测试失败，调度已禁用：%s", err.Error()), change, nil
@@ -1133,12 +1153,12 @@ func (s *Service) testManagedTargetAccount(
 	}
 	if _, err := client.TestAccount(ctx, adminTarget, account.ID, model); err != nil {
 		change := testRemoteAccountChange(syncAccount, account.Name, account.ID, model, false, err.Error())
-		if _, setErr := client.SetAccountSchedulable(ctx, adminTarget, account.ID, false); setErr != nil {
+		if setErr := s.protectManagedRemoteAccount(ctx, adminTarget, client, account.ID, err.Error()); setErr != nil {
 			return "", "", setErr
 		}
 		return fmt.Sprintf("测试模型 %s 失败，调度已禁用：%s", model, err.Error()), change, nil
 	}
-	if _, err := client.SetAccountSchedulable(ctx, adminTarget, account.ID, true); err != nil {
+	if err := s.restoreManagedRemoteAccount(ctx, adminTarget, client, account.ID); err != nil {
 		return "", "", err
 	}
 	change := ""
@@ -1324,6 +1344,12 @@ func (s *Service) disableRemoteAccount(
 	now time.Time,
 	reason string,
 ) error {
+	if s.guard != nil && s.guard.IsManagedAccount(account.ID) {
+		return s.guard.ActivateSchedulingLock(ctx, account.ID, "sync", reason, map[string]any{
+			"remote_account_id": account.ID,
+			"reason":            reason,
+		}, "syncer")
+	}
 	account.Status = "inactive"
 	disabledDescription := disabledManagedAccountDescription(reason, now)
 	account.Notes = disabledDescription
@@ -1349,8 +1375,47 @@ func (s *Service) syncRemoteAccountSchedulable(
 	if account == nil {
 		return nil
 	}
+	if s.guard != nil && s.guard.IsManagedAccount(account.ID) {
+		if err := s.guard.ClearSchedulingLock(ctx, account.ID, "sync", "syncer"); err != nil {
+			return err
+		}
+		return s.guard.ReconcileScheduling(ctx, account.ID, "syncer")
+	}
 	schedulable := strings.EqualFold(strings.TrimSpace(account.Status), "active")
 	_, err := client.SetAccountSchedulable(ctx, adminTarget, account.ID, schedulable)
+	return err
+}
+
+func (s *Service) protectManagedRemoteAccount(
+	ctx context.Context,
+	adminTarget sub2api.AdminTarget,
+	client *sub2api.AdminClient,
+	remoteAccountID int64,
+	reason string,
+) error {
+	if s.guard != nil && s.guard.IsManagedAccount(remoteAccountID) {
+		return s.guard.ActivateSchedulingLock(ctx, remoteAccountID, "sync", reason, map[string]any{
+			"remote_account_id": remoteAccountID,
+			"reason":            reason,
+		}, "syncer")
+	}
+	_, err := client.SetAccountSchedulable(ctx, adminTarget, remoteAccountID, false)
+	return err
+}
+
+func (s *Service) restoreManagedRemoteAccount(
+	ctx context.Context,
+	adminTarget sub2api.AdminTarget,
+	client *sub2api.AdminClient,
+	remoteAccountID int64,
+) error {
+	if s.guard != nil && s.guard.IsManagedAccount(remoteAccountID) {
+		if err := s.guard.ClearSchedulingLock(ctx, remoteAccountID, "sync", "syncer"); err != nil {
+			return err
+		}
+		return s.guard.ReconcileScheduling(ctx, remoteAccountID, "syncer")
+	}
+	_, err := client.SetAccountSchedulable(ctx, adminTarget, remoteAccountID, true)
 	return err
 }
 
@@ -1682,7 +1747,7 @@ func (s *Service) cleanupUnmanagedRemoteAccounts(
 	for _, account := range managedAccounts {
 		managedTargetIDs[account.TargetAccountID] = struct{}{}
 	}
-	remoteAccounts, err := client.ListAccounts(ctx, adminTarget, 1, 1000)
+	remoteAccounts, err := client.ListAllAccounts(ctx, adminTarget)
 	if err != nil {
 		return 0, err
 	}

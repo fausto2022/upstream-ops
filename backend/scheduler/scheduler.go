@@ -27,11 +27,18 @@ type Scheduler struct {
 	captchas      *storage.Captchas
 	cipher        *crypto.Cipher
 	upstreamSync  upstreamSyncService
+	mainStation   mainStationHealthService
 	proxy         config.ProxyConfig
 }
 
 type upstreamSyncService interface {
 	SyncAllOnRateScan(ctx context.Context)
+}
+
+type mainStationHealthService interface {
+	RunDueHealthChecks(ctx context.Context)
+	SyncForScheduler(ctx context.Context)
+	RunProfitEvaluation(ctx context.Context)
 }
 
 func New(
@@ -45,6 +52,7 @@ func New(
 	captchas *storage.Captchas,
 	cipher *crypto.Cipher,
 	upstreamSync upstreamSyncService,
+	mainStation mainStationHealthService,
 	proxy config.ProxyConfig,
 	log *slog.Logger,
 ) *Scheduler {
@@ -61,6 +69,7 @@ func New(
 		captchas:      captchas,
 		cipher:        cipher,
 		upstreamSync:  upstreamSync,
+		mainStation:   mainStation,
 		proxy:         proxy,
 	}
 }
@@ -81,6 +90,11 @@ func (s *Scheduler) Start() error {
 			return err
 		}
 	}
+	if s.mainStation != nil {
+		if _, err := s.cron.AddFunc("@every 30s", s.runMainStationHealth); err != nil {
+			return err
+		}
+	}
 	s.cron.Start()
 	s.log.Info("scheduler started",
 		"balanceCron", s.cfg.BalanceCron,
@@ -89,6 +103,12 @@ func (s *Scheduler) Start() error {
 		"concurrency", s.cfg.Concurrency,
 	)
 	return nil
+}
+
+func (s *Scheduler) runMainStationHealth() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	s.mainStation.RunDueHealthChecks(ctx)
 }
 
 func (s *Scheduler) Stop() {
@@ -116,6 +136,10 @@ func (s *Scheduler) runRates() {
 	}
 	if s.upstreamSync != nil {
 		s.upstreamSync.SyncAllOnRateScan(ctx)
+	}
+	if s.mainStation != nil {
+		s.mainStation.SyncForScheduler(ctx)
+		s.mainStation.RunProfitEvaluation(ctx)
 	}
 }
 

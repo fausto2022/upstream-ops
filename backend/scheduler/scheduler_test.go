@@ -75,6 +75,7 @@ func TestRunRetentionDeletesAnnouncements(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		config.ProxyConfig{},
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
@@ -133,6 +134,7 @@ func TestRunRetentionDeletesUpstreamSyncLogsWithMonitorLogDays(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		config.ProxyConfig{},
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
@@ -161,6 +163,7 @@ func TestRunRatesTriggersUpstreamSync(t *testing.T) {
 		nil,
 		nil,
 		syncSvc,
+		nil,
 		config.ProxyConfig{},
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
