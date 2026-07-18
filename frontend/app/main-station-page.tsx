@@ -195,7 +195,7 @@ export default function MainStationPage() {
     }
     setBusyAccountID(account.remote_account_id)
     try {
-      const platform = (account.platform ?? "").trim().toLowerCase()
+      const platform = healthPlatformKey(account.platform)
       const healthModel = account.member.health_model || config?.health_models?.[platform]
       await apiFetch(`/main-station/groups/${selectedWorkspace.group.id}/accounts/${account.member.id}/check`, {
         method: "POST",
@@ -523,6 +523,14 @@ export default function MainStationPage() {
       {confirmDialog}
     </div>
   )
+}
+
+function healthPlatformKey(platform?: string) {
+  const normalized = (platform ?? "").trim().toLowerCase()
+  if (normalized === "claude") return "anthropic"
+  if (normalized === "google") return "gemini"
+  if (normalized === "xai") return "grok"
+  return normalized
 }
 
 function GroupButton({ active, name, count, status, icon, onClick }: { active: boolean; name: string; count: number; status?: string; icon?: ReactNode; onClick: () => void }) {

@@ -209,6 +209,16 @@ func TestHealthModelCatalogHasBuiltinsWithoutAccounts(t *testing.T) {
 	if anthropic == nil || anthropic.Error != "" || len(anthropic.Models) == 0 || !containsString(anthropic.Models, "claude-3-5-sonnet-20241022") {
 		t.Fatalf("builtin anthropic catalog = %#v", anthropic)
 	}
+	var grok *HealthModelCatalog
+	for i := range catalogs {
+		if catalogs[i].Platform == "grok" {
+			grok = &catalogs[i]
+			break
+		}
+	}
+	if grok == nil || grok.Error != "" || !containsString(grok.Models, "grok-4.5") || normalizeHealthPlatform("xai") != "grok" {
+		t.Fatalf("builtin grok catalog = %#v", grok)
+	}
 }
 
 func containsString(values []string, expected string) bool {

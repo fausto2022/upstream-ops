@@ -31,6 +31,13 @@ var builtinHealthModels = map[string][]string{
 		"gemini-3.1-flash-image", "gemini-2.5-flash-image", "gemini-2.0-flash", "gemini-2.5-flash",
 		"gemini-2.5-pro", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3-pro-preview",
 	},
+	"grok": {
+		"grok-4.5", "grok-4.3", "grok-build-0.1", "grok-composer-2.5-fast", "grok-4.20-0309-reasoning",
+		"grok-4.20-0309-non-reasoning", "grok-4.20-multi-agent-0309", "grok", "grok-latest",
+		"grok-4.5-latest", "grok-build", "grok-build-latest", "grok-composer", "composer-2.5",
+		"grok-4.20-reasoning", "grok-4.20-non-reasoning", "grok-imagine", "grok-imagine-image-quality",
+		"grok-imagine-image", "grok-imagine-edit", "grok-imagine-video", "grok-imagine-video-1.5",
+	},
 }
 
 func decodeHealthModels(raw string) map[string]string {
@@ -74,6 +81,8 @@ func normalizeHealthPlatform(platform string) string {
 		return "anthropic"
 	case "google":
 		return "gemini"
+	case "xai":
+		return "grok"
 	default:
 		return strings.ToLower(strings.TrimSpace(platform))
 	}
@@ -101,7 +110,7 @@ func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCat
 	}
 	candidates := make(map[string][]storage.MainAccountPoolMember)
 	platforms := map[string]struct{}{
-		"openai": {}, "anthropic": {}, "gemini": {},
+		"openai": {}, "anthropic": {}, "gemini": {}, "grok": {},
 	}
 	for platform := range s.configuredHealthModels() {
 		platforms[platform] = struct{}{}
