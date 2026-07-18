@@ -13,6 +13,26 @@ import (
 	"github.com/bejix/upstream-ops/backend/storage"
 )
 
+var builtinHealthModels = map[string][]string{
+	"openai": {
+		"gpt-5.2", "gpt-5.2-2025-12-11", "gpt-5.2-chat-latest", "gpt-5.2-pro", "gpt-5.2-pro-2025-12-11",
+		"gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
+		"gpt-5.4-2026-03-05", "gpt-5.3-codex-spark", "codex-auto-review", "gpt-4o-audio-preview",
+		"gpt-4o-realtime-preview", "gpt-image-1", "gpt-image-1.5", "gpt-image-2",
+	},
+	"anthropic": {
+		"claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20240620", "claude-3-5-haiku-20241022",
+		"claude-3-7-sonnet-20250219", "claude-sonnet-4-20250514", "claude-opus-4-20250514",
+		"claude-opus-4-1-20250805", "claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001",
+		"claude-opus-4-5-20251101", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8",
+		"claude-sonnet-4-6", "claude-sonnet-5", "claude-fable-5",
+	},
+	"gemini": {
+		"gemini-3.1-flash-image", "gemini-2.5-flash-image", "gemini-2.0-flash", "gemini-2.5-flash",
+		"gemini-2.5-pro", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3-pro-preview",
+	},
+}
+
 func decodeHealthModels(raw string) map[string]string {
 	models := make(map[string]string)
 	_ = json.Unmarshal([]byte(raw), &models)
@@ -111,7 +131,8 @@ func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCat
 	sort.Strings(keys)
 	catalogs := make([]HealthModelCatalog, 0, len(keys))
 	for _, platform := range keys {
-		catalog := HealthModelCatalog{Platform: platform, Models: []string{}}
+		catalog := HealthModelCatalog{Platform: platform, Models: append([]string(nil), builtinHealthModels[platform]...)}
+		var discovered []string
 		var lastErr error
 		seen := make(map[string]struct{})
 		for i := range candidates[platform] {
@@ -129,28 +150,27 @@ func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCat
 				lastErr = credentialErr
 				continue
 			}
-			catalog.Models, lastErr = connector.FetchModels(ctx, s.probeHTTPClient(channel), channel.SiteURL, platform, secret)
+			discovered, lastErr = connector.FetchModels(ctx, s.probeHTTPClient(channel), channel.SiteURL, platform, secret)
 			if lastErr == nil {
 				break
 			}
 		}
-		if len(catalog.Models) == 0 && adminErr == nil {
+		if len(discovered) == 0 && adminErr == nil {
 			attempts := 0
 			for i := range snapshots {
 				if normalizeHealthPlatform(snapshots[i].Platform) != platform {
 					continue
 				}
 				attempts++
-				catalog.Models, lastErr = admin.SyncAccountModelsFromUpstream(ctx, sub2api.AdminTarget{
+				discovered, lastErr = admin.SyncAccountModelsFromUpstream(ctx, sub2api.AdminTarget{
 					BaseURL: adminTarget.BaseURL, APIKey: adminAPIKey,
 				}, snapshots[i].RemoteAccountID)
 				if lastErr != nil {
-					catalog.Models, lastErr = admin.ListAccountModels(ctx, sub2api.AdminTarget{
+					discovered, lastErr = admin.ListAccountModels(ctx, sub2api.AdminTarget{
 						BaseURL: adminTarget.BaseURL, APIKey: adminAPIKey,
 					}, snapshots[i].RemoteAccountID)
 				}
-				if lastErr == nil && len(catalog.Models) > 0 {
-					sort.Strings(catalog.Models)
+				if lastErr == nil && len(discovered) > 0 {
 					break
 				}
 				if attempts >= 3 {
@@ -158,6 +178,7 @@ func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCat
 				}
 			}
 		}
+		catalog.Models = mergeHealthModelLists(catalog.Models, discovered)
 		if len(catalog.Models) == 0 {
 			if lastErr != nil {
 				catalog.Error = sanitizeText(redactSecretError(lastErr, adminAPIKey).Error())
@@ -168,6 +189,26 @@ func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCat
 		catalogs = append(catalogs, catalog)
 	}
 	return catalogs, nil
+}
+
+func mergeHealthModelLists(lists ...[]string) []string {
+	seen := make(map[string]struct{})
+	models := make([]string, 0)
+	for _, list := range lists {
+		for _, value := range list {
+			model := strings.TrimSpace(value)
+			if model == "" {
+				continue
+			}
+			if _, ok := seen[model]; ok {
+				continue
+			}
+			seen[model] = struct{}{}
+			models = append(models, model)
+		}
+	}
+	sort.Strings(models)
+	return models
 }
 
 func memberKey(member *storage.MainAccountPoolMember) string {

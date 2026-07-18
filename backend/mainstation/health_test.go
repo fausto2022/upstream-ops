@@ -152,7 +152,7 @@ func TestGlobalHealthModelCatalogAndInheritance(t *testing.T) {
 			break
 		}
 	}
-	if openAICatalog == nil || len(openAICatalog.Models) != 2 || openAICatalog.Error != "" {
+	if openAICatalog == nil || openAICatalog.Error != "" || !containsString(openAICatalog.Models, "gpt-global") || !containsString(openAICatalog.Models, "gpt-other") {
 		t.Fatalf("health model catalogs = %#v", catalogs)
 	}
 	result, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L1", Force: true})
@@ -187,9 +187,37 @@ func TestHealthModelCatalogUsesUnboundMainStationAccount(t *testing.T) {
 			break
 		}
 	}
-	if anthropic == nil || anthropic.Error != "" || len(anthropic.Models) != 2 || len(admin.syncModelCalls) != 1 || admin.syncModelCalls[0] != 31 {
+	if anthropic == nil || anthropic.Error != "" || !containsString(anthropic.Models, "claude-sonnet-4-5") || !containsString(anthropic.Models, "claude-haiku-4-5") || len(admin.syncModelCalls) != 1 || admin.syncModelCalls[0] != 31 {
 		t.Fatalf("anthropic catalog = %#v, sync calls = %#v", anthropic, admin.syncModelCalls)
 	}
+}
+
+func TestHealthModelCatalogHasBuiltinsWithoutAccounts(t *testing.T) {
+	service, _, _, _ := newTestService(t)
+	configureTestStation(t, service)
+	catalogs, err := service.ListHealthModelCatalogs(context.Background())
+	if err != nil {
+		t.Fatalf("list builtin catalogs: %v", err)
+	}
+	var anthropic *HealthModelCatalog
+	for i := range catalogs {
+		if catalogs[i].Platform == "anthropic" {
+			anthropic = &catalogs[i]
+			break
+		}
+	}
+	if anthropic == nil || anthropic.Error != "" || len(anthropic.Models) == 0 || !containsString(anthropic.Models, "claude-3-5-sonnet-20241022") {
+		t.Fatalf("builtin anthropic catalog = %#v", anthropic)
+	}
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func TestHealthBudgetStopsNonEssentialProbe(t *testing.T) {
