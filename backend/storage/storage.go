@@ -37,7 +37,7 @@ func (c DBConfig) SQLitePath() string {
 	if strings.TrimSpace(c.Path) != "" {
 		return c.Path
 	}
-	return "./data/upstream-ops.db"
+	return "./data/relaydeck.db"
 }
 
 func (c DBConfig) MySQLDSN() string {
@@ -73,7 +73,7 @@ func Open(cfg DBConfig) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 	switch driver {
 	case DBDriverSQLite:
-		path := cfg.SQLitePath()
+		path := resolveSQLitePath(cfg.SQLitePath())
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, fmt.Errorf("create sqlite dir: %w", err)
 		}
@@ -111,6 +111,20 @@ func Open(cfg DBConfig) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func resolveSQLitePath(path string) string {
+	if filepath.Base(path) != "relaydeck.db" {
+		return path
+	}
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	legacyPath := filepath.Join(filepath.Dir(path), "upstream-ops.db")
+	if _, err := os.Stat(legacyPath); err == nil {
+		return legacyPath
+	}
+	return path
 }
 
 // AutoMigrate 启动时自动同步表结构。

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/channel"
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/connector"
-	"github.com/bejix/upstream-ops/backend/scheduler"
+	"github.com/fausto2022/relaydeck/backend/channel"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/scheduler"
 )
 
 type fakeHTTPConfigConnector struct {

@@ -8,10 +8,10 @@
 /server
 /bin/
 /tmp/
-/upstream-ops
-/upstream-ops.exe
-/upstream-ops-*.tar
-/upstream-ops.deploy.env
+/relaydeck
+/relaydeck.exe
+/relaydeck-*.tar
+/relaydeck.deploy.env
 /docker-compose.deploy.yml
 
 # Test / coverage

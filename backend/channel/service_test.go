@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/connector"
-	_ "github.com/bejix/upstream-ops/backend/connector/newapi"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	_ "github.com/fausto2022/relaydeck/backend/connector/newapi"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/storage"
 )
 
 type fakeHTTPConfigConnector struct {

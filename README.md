@@ -1,10 +1,10 @@
-# UpstreamOps
+# RelayDeck
 
 [English](README.md) | [简体中文](README.zh.md)
 
-> UpstreamOps is a centralized monitoring and operations dashboard for NewAPI and Sub2API upstream sites. It helps manage upstream accounts, balances, spending, model or group rates, Sub2API upstream synchronization, rate changes, upstream API keys, recharge and redeem workflows, subscriptions, announcements, and notification alerts.
+> RelayDeck is a centralized monitoring and operations dashboard for NewAPI and Sub2API upstream sites. It helps manage upstream accounts, balances, spending, model or group rates, Sub2API upstream synchronization, rate changes, upstream API keys, recharge and redeem workflows, subscriptions, announcements, and notification alerts.
 
-UpstreamOps is not a model proxy or request forwarding gateway. It is an operations console for maintaining multiple upstream admin panels from one place.
+RelayDeck is not a model proxy or request forwarding gateway. It is an operations console for maintaining multiple upstream admin panels from one place.
 
 > This project is based on [worryzyy/upstream-hub](https://github.com/worryzyy/upstream-hub). Thanks to [@worryzyy](https://github.com/worryzyy) for the original open-source work.
 
@@ -16,17 +16,17 @@ UpstreamOps is not a model proxy or request forwarding gateway. It is an operati
 <table>
 <tr>
 <td width="180"><a href="https://cmzi.com/aff/CHTVTQWE"><img src="https://zhenxiansheng-1251032746.file.myqcloud.com/Markdown/2020/12/29/zi-yuan-32.png" alt="cmzi.com" width="150"></a></td>
-<td>Thanks to 触摸云 for sponsoring this project. 触摸云 provides overseas cloud computing services, including Hong Kong cloud servers, US high-defense servers, physical servers, protection services, acceleration CDN, and self-developed CDN systems. UpstreamOps users can use <a href="https://cmzi.com/aff/CHTVTQWE">this link</a>.</td>
+<td>Thanks to 触摸云 for sponsoring this project. 触摸云 provides overseas cloud computing services, including Hong Kong cloud servers, US high-defense servers, physical servers, protection services, acceleration CDN, and self-developed CDN systems. RelayDeck users can use <a href="https://cmzi.com/aff/CHTVTQWE">this link</a>.</td>
 </tr>
 </table>
 
 </details>
 
-## Why Use UpstreamOps
+## Why Use RelayDeck
 
 When you maintain multiple NewAPI or Sub2API upstream accounts, balance, spending, rates, announcements, API keys, subscriptions, recharge entry points, and downstream synchronization are usually scattered across different admin panels. Manually logging in one by one is repetitive and can easily miss low balances, rate changes, login failures, expiring subscriptions, or upstream announcements.
 
-UpstreamOps focuses on these problems:
+RelayDeck focuses on these problems:
 
 - Centralized status view: balances, spending, rates, announcements, subscriptions, and abnormal states across multiple upstreams.
 - Less manual checking: scheduled balance, spending, rate, and subscription usage synchronization.
@@ -37,19 +37,19 @@ UpstreamOps focuses on these problems:
 
 ## Preview
 
-![UpstreamOps preview 1](docs/images/demo1.png)
+![RelayDeck preview 1](docs/images/demo1.png)
 
-![UpstreamOps preview 2](docs/images/demo2.png)
+![RelayDeck preview 2](docs/images/demo2.png)
 
-![UpstreamOps preview 3](docs/images/demo3.png)
+![RelayDeck preview 3](docs/images/demo3.png)
 
-![UpstreamOps preview 4](docs/images/demo4.png)
+![RelayDeck preview 4](docs/images/demo4.png)
 
-![UpstreamOps preview 5](docs/images/demo5.png)
+![RelayDeck preview 5](docs/images/demo5.png)
 
-![UpstreamOps preview 6](docs/images/demo6.png)
+![RelayDeck preview 6](docs/images/demo6.png)
 
-![UpstreamOps preview 7](docs/images/demo7.png)
+![RelayDeck preview 7](docs/images/demo7.png)
 
 ## Features
 
@@ -87,6 +87,7 @@ UpstreamOps focuses on these problems:
 - Uses fixed-point conservative sale, cost, and margin calculations. Complex or stale pricing remains unknown/unsupported and cannot trigger automatic disabling.
 - Independent `manual`, `margin`, `health`, `sync`, `credential`, and `binding` locks feed one audited remote scheduling decision.
 - Automatic margin protection, health protection, and recovery are off by default. They require observation evidence before enablement and can be returned to notify-only mode.
+- Uses account cards for priority, health, connectivity, source-channel rate, binding, and protection status at a glance.
 
 ### Balance and Spending Monitoring
 
@@ -100,6 +101,8 @@ UpstreamOps focuses on these problems:
 ### Rate Monitoring
 
 - Syncs upstream model or group rates.
+- Adds a dashboard rate ranking grouped by OpenAI, Anthropic, Gemini, Grok, image generation, and other categories.
+- Compares converted rates across every channel and sorts groups from lowest to highest cost.
 - Stores current rate snapshots.
 - Records rate change history.
 - Supports paginated rate change history and channel filters.
@@ -112,7 +115,7 @@ UpstreamOps focuses on these problems:
 
 ### Subscription Management and Usage Monitoring
 
-For Sub2API upstream channels, UpstreamOps provides subscription lifecycle management and usage monitoring:
+For Sub2API upstream channels, RelayDeck provides subscription lifecycle management and usage monitoring:
 
 - Queries upstream subscription plans and payment methods.
 - Purchases or renews subscriptions.
@@ -253,7 +256,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-a-strong-password
 ```
 
-Docker pulls `ghcr.io/fausto2022/upstream-ops:${IMAGE_TAG:-latest}` by default. Configuration and data are stored in the host `data/` directory.
+Docker pulls `ghcr.io/fausto2022/relaydeck:${IMAGE_TAG:-latest}` by default. Configuration and data are stored in the host `data/` directory.
 
 Start:
 
@@ -270,10 +273,10 @@ http://localhost:8080
 Default database file inside the container:
 
 ```text
-/app/data/upstream-ops.db
+/app/data/relaydeck.db
 ```
 
-The host file is `data/upstream-ops.db`. Runtime system settings are persisted to `data/config.yaml`.
+The host file is `data/relaydeck.db`. Runtime system settings are persisted to `data/config.yaml`.
 
 ### Pin the Image Version
 
@@ -301,8 +304,8 @@ Required `.env` values:
 
 ```env
 APP_SECRET=replace-with-a-random-string-at-least-32-bytes
-MYSQL_DATABASE=upstreamops
-MYSQL_USER=upstreamops
+MYSQL_DATABASE=relaydeck
+MYSQL_USER=relaydeck
 MYSQL_PASSWORD=replace-with-database-password
 MYSQL_ROOT_PASSWORD=replace-with-root-password
 MYSQL_PORT=33069
@@ -318,7 +321,7 @@ Stop writes, back up the database, runtime configuration, and environment, then 
 
 ```bash
 docker compose stop app
-cp data/upstream-ops.db data/upstream-ops.db.before-upgrade
+cp data/relaydeck.db data/relaydeck.db.before-upgrade
 cp data/config.yaml data/config.yaml.before-upgrade
 cp .env .env.before-upgrade
 docker compose pull app
@@ -336,7 +339,7 @@ Dump the database before upgrading the application, and do not delete the `mysql
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml stop app
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml exec -T mysql \
-  sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > upstreamops-before-upgrade.sql
+  sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > relaydeck-before-upgrade.sql
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml pull app
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d app
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml ps
@@ -351,7 +354,7 @@ curl -fsS http://localhost:${HTTP_PORT:-8080}/healthz
 4. Restore the SQLite backup or MySQL dump only after stopping all writers and only when data rollback is required. Database restoration discards post-upgrade account-pool, lock, and audit changes.
 5. Keep automatic protection disabled during rollback. Verify `/healthz`, main-station configuration, pool bindings, and lock state before re-enabling policies.
 
-`.github/workflows/publish.yml` builds `linux/amd64` and `linux/arm64` images for `v*.*.*` tags and publishes them to `ghcr.io/fausto2022/upstream-ops`. For local verification, run `docker build -t upstream-ops:verify .` from the repository root so the frontend assets are embedded.
+`.github/workflows/publish.yml` builds `linux/amd64` and `linux/arm64` images for `v*.*.*` tags and publishes them to `ghcr.io/fausto2022/relaydeck`. For local verification, run `docker build -t relaydeck:verify .` from the repository root so the frontend assets are embedded.
 
 ## Environment Variables
 
@@ -375,7 +378,7 @@ SQLite:
 
 ```env
 DATABASE_DRIVER=sqlite
-DATABASE_PATH=/app/data/upstream-ops.db
+DATABASE_PATH=/app/data/relaydeck.db
 ```
 
 MySQL:
@@ -384,9 +387,9 @@ MySQL:
 DATABASE_DRIVER=mysql
 DATABASE_HOST=mysql
 DATABASE_PORT=3306
-DATABASE_USER=upstreamops
+DATABASE_USER=relaydeck
 DATABASE_PASSWORD=change-me
-DATABASE_NAME=upstreamops
+DATABASE_NAME=relaydeck
 ```
 
 ### Security and Login
@@ -448,7 +451,7 @@ pnpm build
 
 ## Proxy and Upstream HTTP Settings
 
-System settings can configure global proxy and upstream request settings. Proxy is disabled by default, protocol defaults to `http`, upstream timeout defaults to `30` seconds, and `User-Agent` defaults to `upstream-ops/0.1`.
+System settings can configure global proxy and upstream request settings. Proxy is disabled by default, protocol defaults to `http`, upstream timeout defaults to `30` seconds, and `User-Agent` defaults to `relaydeck/0.1`.
 
 Configuration fields:
 
@@ -464,7 +467,7 @@ proxy:
 
 upstream:
   timeoutSeconds: 30
-  userAgent: upstream-ops/0.1
+  userAgent: relaydeck/0.1
 ```
 
 - `proxy.enabled`: enables global proxy.
@@ -570,7 +573,7 @@ Webhook body example:
 ```json
 {
   "event": "announcement",
-  "subject": "[UpstreamOps] xxx",
+  "subject": "[RelayDeck] xxx",
   "body": "notification body",
   "extra": {}
 }

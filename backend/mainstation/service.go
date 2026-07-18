@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/connector"
-	"github.com/bejix/upstream-ops/backend/connector/sub2api"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/connector/sub2api"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"gorm.io/gorm"
 )
 
@@ -122,7 +122,7 @@ func New(
 		healthGlobal:   make(chan struct{}, 4),
 		healthChannels: make(map[uint]chan struct{}),
 		probeTimeout:   15 * time.Second,
-		probeUserAgent: "UpstreamOps/main-station-health",
+		probeUserAgent: "RelayDeck/main-station-health",
 		now:            time.Now,
 	}
 }
@@ -132,7 +132,7 @@ func (s *Service) UpdateProbeConfig(proxy config.ProxyConfig, timeout time.Durat
 		timeout = 15 * time.Second
 	}
 	if strings.TrimSpace(userAgent) == "" {
-		userAgent = "UpstreamOps/main-station-health"
+		userAgent = "RelayDeck/main-station-health"
 	}
 	s.probeConfigMu.Lock()
 	s.proxyConfig = proxy

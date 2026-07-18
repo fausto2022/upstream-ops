@@ -16,7 +16,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const appTitle = appVersion.data?.title?.trim() || "UpstreamOps"
+  const appTitle = appVersion.data?.title?.trim() || "RelayDeck"
 
   useEffect(() => {
     document.title = appTitle

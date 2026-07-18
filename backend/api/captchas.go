@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/bejix/upstream-ops/backend/captcha"
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/captcha"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"github.com/gin-gonic/gin"
 )
 

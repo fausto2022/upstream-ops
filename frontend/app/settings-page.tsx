@@ -920,10 +920,10 @@ export default function SettingsPage() {
                   }
                 />
               </Field>
-              <Field label="User-Agent" description="为空时使用 upstream-ops/0.1。">
+              <Field label="User-Agent" description="为空时使用 relaydeck/0.1。">
                 <Input
                   value={form.upstream.userAgent}
-                  placeholder="upstream-ops/0.1"
+                  placeholder="relaydeck/0.1"
                   onChange={(e) =>
                     setForm((prev) =>
                       prev

@@ -6,7 +6,7 @@
 #   3) runtime          — 极小 alpine 镜像只放一个静态二进制
 #
 # 由于第二阶段需要 frontend 产物，构建 context 必须是 repo 根目录：
-#   docker build -t upstream-ops:dev .
+#   docker build -t relaydeck:dev .
 #   或在 docker-compose 里写 context: .
 
 # ---------- Stage 1: 前端 ----------
@@ -45,7 +45,7 @@ COPY --from=frontend-builder /web/dist ./web/dist
 RUN CGO_ENABLED=0 GOOS=linux go build \
         -trimpath \
         -ldflags="-s -w" \
-        -o /out/upstream-ops \
+        -o /out/relaydeck \
         ./cmd/server
 
 # ---------- Stage 3: 运行时 ----------
@@ -53,6 +53,6 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget && \
     mkdir -p /app/data
 WORKDIR /app
-COPY --from=go-builder /out/upstream-ops /usr/local/bin/upstream-ops
+COPY --from=go-builder /out/relaydeck /usr/local/bin/relaydeck
 EXPOSE 8418
-ENTRYPOINT ["upstream-ops"]
+ENTRYPOINT ["relaydeck"]

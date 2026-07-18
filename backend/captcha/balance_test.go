@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/storage"
 )
 
 func TestFetchBalance(t *testing.T) {

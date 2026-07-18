@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/connector"
 )
 
 func TestSetHTTPConfigAppliesUserAgentAndTimeout(t *testing.T) {

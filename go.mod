@@ -1,4 +1,4 @@
-module github.com/bejix/upstream-ops
+module github.com/fausto2022/relaydeck
 
 go 1.23
 

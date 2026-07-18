@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/connector/sub2api"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/connector/sub2api"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"gorm.io/gorm"
 )
 

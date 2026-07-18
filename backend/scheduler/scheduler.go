@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/captcha"
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/monitor"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/captcha"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/monitor"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"github.com/robfig/cron/v3"
 )
 

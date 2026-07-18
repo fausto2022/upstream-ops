@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/connector"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -29,7 +29,7 @@ type Client struct {
 func New() *Client {
 	c := resty.New().
 		SetTimeout(30*time.Second).
-		SetHeader("User-Agent", "upstream-ops/0.1").
+		SetHeader("User-Agent", "relaydeck/0.1").
 		SetHeader("Accept", "application/json")
 	return &Client{http: c}
 }

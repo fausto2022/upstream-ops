@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"gorm.io/gorm"
 )
 

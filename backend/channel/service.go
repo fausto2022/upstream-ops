@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/captcha"
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/connector"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/progress"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/captcha"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/progress"
+	"github.com/fausto2022/relaydeck/backend/storage"
 )
 
 // SessionRefreshThreshold 距离过期还有多久就提前刷新登录。

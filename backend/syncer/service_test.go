@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/connector"
-	"github.com/bejix/upstream-ops/backend/connector/sub2api"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/connector/sub2api"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"gorm.io/gorm"
 )
 
@@ -1857,7 +1857,7 @@ func TestApplySyncGroupDisablesManagedAccountWhenSourceGroupUnbound(t *testing.T
 	if admin.accounts[10]["schedulable"] != true {
 		t.Fatalf("restored account schedulable = %#v, want true", admin.accounts[10]["schedulable"])
 	}
-	if !strings.Contains(fmt.Sprint(admin.accounts[10]["notes"]), "Upstream Ops 同步") || !strings.Contains(fmt.Sprint(admin.accounts[10]["notes"]), "同步时间：") {
+	if !strings.Contains(fmt.Sprint(admin.accounts[10]["notes"]), "RelayDeck 同步") || !strings.Contains(fmt.Sprint(admin.accounts[10]["notes"]), "同步时间：") {
 		t.Fatalf("restored account notes = %#v", admin.accounts[10]["notes"])
 	}
 }

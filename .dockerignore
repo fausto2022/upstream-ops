@@ -11,8 +11,8 @@
 # Go
 **/bin
 **/*.exe
-upstream-ops
-upstream-ops.exe
+relaydeck
+relaydeck.exe
 
 # 本地构建产物：Dockerfile 内部会重新 pnpm build，不要把宿主的 dist 拷进去
 frontend/dist

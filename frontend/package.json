@@ -1,5 +1,5 @@
 {
-  "name": "upstream-ops-web",
+  "name": "relaydeck-web",
   "version": "0.0.6",
   "private": true,
   "type": "module",

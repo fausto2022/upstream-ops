@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/auth"
-	"github.com/bejix/upstream-ops/backend/channel"
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/scheduler"
+	"github.com/fausto2022/relaydeck/backend/auth"
+	"github.com/fausto2022/relaydeck/backend/channel"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/scheduler"
 	"github.com/gin-gonic/gin"
 )
 

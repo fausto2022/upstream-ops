@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bejix/upstream-ops/backend/mainstation"
+	"github.com/fausto2022/relaydeck/backend/mainstation"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -136,7 +136,7 @@ type ProxyConfig struct {
 
 const (
 	DefaultUpstreamTimeoutSeconds = 30
-	DefaultUpstreamUserAgent      = "upstream-ops/0.1"
+	DefaultUpstreamUserAgent      = "relaydeck/0.1"
 )
 
 type UpstreamConfig struct {
@@ -194,7 +194,7 @@ func load(path string, withEnv bool) (*Config, string, error) {
 		for _, p := range configSearchPaths() {
 			v.AddConfigPath(p)
 		}
-		v.AddConfigPath("/etc/upstream-ops")
+		v.AddConfigPath("/etc/relaydeck")
 	}
 
 	setDefaults(v)
@@ -287,7 +287,7 @@ func configSearchPaths() []string {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("app.title", "UpstreamOps")
+	v.SetDefault("app.title", "RelayDeck")
 	v.SetDefault("app.notificationPrefix", "[AI 聚合监控] ")
 
 	v.SetDefault("server.port", 8418)
@@ -295,10 +295,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.baseURL", "http://localhost:8418")
 
 	v.SetDefault("database.driver", "sqlite")
-	v.SetDefault("database.path", "./data/upstream-ops.db")
+	v.SetDefault("database.path", "./data/relaydeck.db")
 	v.SetDefault("database.host", "localhost")
 	v.SetDefault("database.port", 3306)
-	v.SetDefault("database.name", "upstreamops")
+	v.SetDefault("database.name", "relaydeck")
 	v.SetDefault("database.maxOpenConns", 20)
 	v.SetDefault("database.maxIdleConns", 5)
 

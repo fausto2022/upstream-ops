@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/runtimeconfig"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/runtimeconfig"
 	"github.com/gin-gonic/gin"
 )
 

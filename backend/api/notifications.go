@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"github.com/gin-gonic/gin"
 )
 
@@ -207,7 +207,7 @@ func testNotify(c *gin.Context, d *Deps) {
 	}
 	msg := notify.Message{
 		Subject: "测试通知",
-		Body:    "这是一条来自 UpstreamOps 的测试消息。",
+		Body:    "这是一条来自 RelayDeck 的测试消息。",
 	}
 	if err := d.Dispatcher.Send(c.Request.Context(), ch, msg); err != nil {
 		c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})

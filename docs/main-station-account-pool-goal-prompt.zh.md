@@ -4,28 +4,28 @@
 
 ## Goal 正文
 
-你正在维护当前工作区中的 UpstreamOps 项目。请完整实现“主站账号池、成本风控与稳定性监控”功能，并把它做成能够实际部署、升级、回滚和持续维护的生产功能。
+你正在维护当前工作区中的 RelayDeck 项目。请完整实现“主站账号池、成本风控与稳定性监控”功能，并把它做成能够实际部署、升级、回滚和持续维护的生产功能。
 
 ### 一、目标仓库和需求基线
 
-- 当前工作区：`D:\WorkSpace\upstream-ops`
-- 我的仓库：`https://github.com/fausto2022/upstream-ops.git`
-- 原始开源项目：`https://github.com/bejix/upstream-ops.git`
+- 当前工作区：`D:\WorkSpace\relaydeck`
+- 我的仓库：`https://github.com/fausto2022/relaydeck.git`
+- 原始开源项目：`https://github.com/fausto2022/relaydeck.git`
 - 主站参考项目：`https://github.com/Wei-Shaw/sub2api.git`
 - 唯一需求基线：`docs/main-station-account-pool-requirements.zh.md`
 
 先完整阅读需求文档和当前代码，再开始修改。需求文档已经明确的业务关系、状态、保护规则和验收标准不得自行简化。若文档与实际 Sub2API API 或当前项目结构冲突，必须先通过源码、测试或可复现请求确认事实，然后采用兼容设计，并在文档中记录差异和理由。
 
-不要把 `Sub2API Account`、主站用户账号和 UpstreamOps 上游渠道混为一谈。核心业务关系必须保持为：
+不要把 `Sub2API Account`、主站用户账号和 RelayDeck 上游渠道混为一谈。核心业务关系必须保持为：
 
 ```text
-一个 UpstreamOps 实例只能配置一个 Sub2API 主站。
+一个 RelayDeck 实例只能配置一个 Sub2API 主站。
 一个主站账号池可以服务一个或多个主站分组。
 一个主站账号池包含多个池成员。
 一个池成员 = 上游渠道 + 上游分组 + 一条独立的主站 Account。
 一个池成员可以创建托管 Account，也可以绑定已有 Account。
 一条主站 Account 只能绑定一个池成员。
-实际请求调度由主站 Sub2API 完成，UpstreamOps 负责管理、测活、成本评估和保护。
+实际请求调度由主站 Sub2API 完成，RelayDeck 负责管理、测活、成本评估和保护。
 ```
 
 ### 二、执行方式
@@ -151,7 +151,7 @@
 
 保证二开后的部署升级链路完整：
 
-- 检查 `backend/api/version.go`、前端版本检查、README、Compose 和 GitHub Actions 均指向 `fausto2022/upstream-ops`。
+- 检查 `backend/api/version.go`、前端版本检查、README、Compose 和 GitHub Actions 均指向 `fausto2022/relaydeck`。
 - 检查 `.github/workflows/publish.yml` 能基于 tag 构建并推送当前仓库的 Docker image。
 - 保持 Docker build context 为仓库根目录，确保前端产物正确嵌入 Go 二进制。
 - 验证 SQLite 默认 Compose 和 MySQL Compose 的配置、持久化卷和迁移行为。
@@ -205,7 +205,7 @@ corepack pnpm build
 Docker：
 
 ```powershell
-docker build -t upstream-ops:goal-verify .
+docker build -t relaydeck:goal-verify .
 docker compose config
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml config
 ```

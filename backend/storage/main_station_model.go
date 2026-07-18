@@ -71,7 +71,7 @@ type MainStationAccountSnapshot struct {
 
 func (MainStationAccountSnapshot) TableName() string { return "main_station_account_snapshots" }
 
-// MainAccountPool 是 UpstreamOps 的逻辑账号池，不对应单条远端 Account。
+// MainAccountPool 是 RelayDeck 的逻辑账号池，不对应单条远端 Account。
 type MainAccountPool struct {
 	ID                          uint       `gorm:"primaryKey" json:"id"`
 	LegacySyncGroupID           *uint      `gorm:"uniqueIndex" json:"legacy_sync_group_id,omitempty"`

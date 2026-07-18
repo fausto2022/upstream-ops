@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/connector"
-	"github.com/bejix/upstream-ops/backend/connector/sub2api"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/connector/sub2api"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/storage"
 )
 
 type channelSvc interface {
@@ -1422,7 +1422,7 @@ func disabledManagedAccountDescription(reason string, at time.Time) string {
 	if reason == "" {
 		reason = "同步失败"
 	}
-	return "Upstream Ops 自动禁用：" + reason + "\n同步时间：" + formatSyncNoteTime(at)
+	return "RelayDeck 自动禁用：" + reason + "\n同步时间：" + formatSyncNoteTime(at)
 }
 
 func isRemoteAccountDisabledForReason(account sub2api.AdminAccount, reason string) bool {
@@ -1433,7 +1433,7 @@ func isRemoteAccountDisabledForReason(account sub2api.AdminAccount, reason strin
 	if !strings.EqualFold(strings.TrimSpace(account.Status), "inactive") || account.Schedulable {
 		return false
 	}
-	return strings.Contains(account.Notes, "Upstream Ops 自动禁用："+reason) ||
+	return strings.Contains(account.Notes, "RelayDeck 自动禁用："+reason) ||
 		strings.Contains(account.Notes, "Upstream Hub 自动禁用："+reason)
 }
 
@@ -1461,7 +1461,7 @@ func testRemoteAccountChange(syncAccount *storage.UpstreamSyncAccount, accountNa
 }
 
 func syncedAccountNotes(at time.Time) string {
-	return "Upstream Ops 同步\n同步时间：" + formatSyncNoteTime(at)
+	return "RelayDeck 同步\n同步时间：" + formatSyncNoteTime(at)
 }
 
 func formatSyncNoteTime(at time.Time) string {

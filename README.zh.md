@@ -1,10 +1,10 @@
-# UpstreamOps
+# RelayDeck
 
 [English](README.md) | [简体中文](README.zh.md)
 
 > 本项目基于 [worryzyy/upstream-hub](https://github.com/worryzyy/upstream-hub) 二次开发，感谢原作者 [@worryzyy](https://github.com/worryzyy) 的开源工作。
 
-> UpstreamOps 是一个面向 NewAPI / Sub2API 上游站点的集中监控与运维面板，用来统一管理上游账号、查看余额与消费、同步模型倍率、管理 Sub2API 上游同步、追踪倍率变化、维护上游 API Key、发起充值/兑换，并通过多种通知渠道推送余额告警、倍率变更、登录异常、监控异常和上游公告。
+> RelayDeck 是一个面向 NewAPI / Sub2API 上游站点的集中监控与运维面板，用来统一管理上游账号、查看余额与消费、同步模型倍率、管理 Sub2API 上游同步、追踪倍率变化、维护上游 API Key、发起充值/兑换，并通过多种通知渠道推送余额告警、倍率变更、登录异常、监控异常和上游公告。
 这不是一个代理网关，也不处理模型请求转发；它更像是给多个上游后台做的“运维控制台”。
 
 
@@ -28,7 +28,7 @@
 
 当你同时维护多个 NewAPI / Sub2API 上游时，余额、消费、倍率、公告、API Key、订阅、充值入口和下游同步配置通常分散在不同后台。人工逐个登录检查不仅重复，而且很容易漏掉余额不足、倍率调整、登录失效、订阅即将到期或上游公告。
 
-UpstreamOps 主要解决这些痛点：
+RelayDeck 主要解决这些痛点：
 
 - 集中看状态：把多个上游的余额、消费、倍率、公告、订阅和异常状态放到一个面板里。
 - 减少人工巡检：定时同步余额、消费、倍率和订阅用量，不需要反复打开不同后台。
@@ -41,19 +41,19 @@ UpstreamOps 主要解决这些痛点：
 
 ## 预览
 
-![UpstreamOps 预览 1](docs/images/demo1.png)
+![RelayDeck 预览 1](docs/images/demo1.png)
 
-![UpstreamOps 预览 2](docs/images/demo2.png)
+![RelayDeck 预览 2](docs/images/demo2.png)
 
-![UpstreamOps 预览 3](docs/images/demo3.png)
+![RelayDeck 预览 3](docs/images/demo3.png)
 
-![UpstreamOps 预览 4](docs/images/demo4.png)
+![RelayDeck 预览 4](docs/images/demo4.png)
 
-![UpstreamOps 预览 5](docs/images/demo5.png)
+![RelayDeck 预览 5](docs/images/demo5.png)
 
-![UpstreamOps 预览 6](docs/images/demo6.png)
+![RelayDeck 预览 6](docs/images/demo6.png)
 
-![UpstreamOps 预览 7](docs/images/demo7.png)
+![RelayDeck 预览 7](docs/images/demo7.png)
 
 ## 功能概览
 
@@ -91,6 +91,7 @@ UpstreamOps 主要解决这些痛点：
 - 使用定点数保守核算销售倍率、成本倍率和利润率；复杂或过期计费数据保持 unknown/unsupported，不触发自动停用。
 - `manual`、`margin`、`health`、`sync`、`credential`、`binding` 六类调度锁互相独立，所有远端调度写入经过统一决策和审计。
 - 自动利润保护、自动健康保护和自动恢复默认关闭，完成观察评估后才可手工开启，并可一键切回只通知模式。
+- 主站账号使用卡片展示优先级、健康、连通率、上游倍率、绑定关系和保护状态。
 
 ### 余额与消费监控
 
@@ -104,6 +105,8 @@ UpstreamOps 主要解决这些痛点：
 ### 倍率监控
 
 - 支持同步上游分组/模型倍率。
+- 首页新增按 OpenAI、Anthropic、Gemini、Grok、生图和其他类型划分的倍率排行。
+- 汇总所有渠道的换算后倍率，并按从低到高排序，方便直接比较不同上游分组成本。
 - 支持记录倍率变化历史。
 - 支持倍率变化历史分页查询和按渠道过滤。
 - 支持倍率变化通知。
@@ -266,7 +269,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=请替换为强密码
 ```
 
-Docker 默认拉取 `ghcr.io/fausto2022/upstream-ops:${IMAGE_TAG:-latest}`，不会在本机编译镜像。配置和数据都会写入宿主机项目目录下的 `data/`。
+Docker 默认拉取 `ghcr.io/fausto2022/relaydeck:${IMAGE_TAG:-latest}`，不会在本机编译镜像。配置和数据都会写入宿主机项目目录下的 `data/`。
 
 启动：
 
@@ -283,10 +286,10 @@ http://localhost:8080
 默认数据文件在容器内：
 
 ```text
-/app/data/upstream-ops.db
+/app/data/relaydeck.db
 ```
 
-宿主机对应文件是项目根目录下的 `data/upstream-ops.db`。系统设置配置文件会持久化到 `data/config.yaml`。
+宿主机对应文件是项目根目录下的 `data/relaydeck.db`。系统设置配置文件会持久化到 `data/config.yaml`。
 
 ### 固定镜像版本
 
@@ -314,8 +317,8 @@ docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d
 
 ```env
 APP_SECRET=请替换为 32 字节以上随机字符串
-MYSQL_DATABASE=upstreamops
-MYSQL_USER=upstreamops
+MYSQL_DATABASE=relaydeck
+MYSQL_USER=relaydeck
 MYSQL_PASSWORD=请替换为数据库密码
 MYSQL_ROOT_PASSWORD=请替换为 root 密码
 MYSQL_PORT=33069
@@ -331,7 +334,7 @@ MYSQL_PORT=33069
 
 ```bash
 docker compose stop app
-cp data/upstream-ops.db data/upstream-ops.db.before-upgrade
+cp data/relaydeck.db data/relaydeck.db.before-upgrade
 cp data/config.yaml data/config.yaml.before-upgrade
 cp .env .env.before-upgrade
 docker compose pull app
@@ -349,7 +352,7 @@ curl -fsS http://localhost:${HTTP_PORT:-8080}/healthz
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml stop app
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml exec -T mysql \
-  sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > upstreamops-before-upgrade.sql
+  sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > relaydeck-before-upgrade.sql
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml pull app
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d app
 docker compose -f docker-compose.yml -f docker-compose.mysql.yml ps
@@ -364,7 +367,7 @@ curl -fsS http://localhost:${HTTP_PORT:-8080}/healthz
 4. 只有确认必须回退数据时，才在停止所有写入后恢复升级前的 SQLite 文件或 MySQL dump。恢复数据库会丢失升级后的账号池、锁和审计变更。
 5. 回滚期间保持自动保护关闭，确认 `/healthz`、主站配置和账号池锁状态后再恢复自动策略。
 
-本仓库的 `.github/workflows/publish.yml` 会在 `v*.*.*` Tag 上构建 `linux/amd64` 和 `linux/arm64` 镜像并推送到 `ghcr.io/fausto2022/upstream-ops`。本地验证镜像使用 `docker build -t upstream-ops:verify .`，构建上下文必须是仓库根目录。
+本仓库的 `.github/workflows/publish.yml` 会在 `v*.*.*` Tag 上构建 `linux/amd64` 和 `linux/arm64` 镜像并推送到 `ghcr.io/fausto2022/relaydeck`。本地验证镜像使用 `docker build -t relaydeck:verify .`，构建上下文必须是仓库根目录。
 
 ## 环境变量
 
@@ -388,7 +391,7 @@ SQLite：
 
 ```env
 DATABASE_DRIVER=sqlite
-DATABASE_PATH=/app/data/upstream-ops.db
+DATABASE_PATH=/app/data/relaydeck.db
 ```
 
 MySQL：
@@ -397,9 +400,9 @@ MySQL：
 DATABASE_DRIVER=mysql
 DATABASE_HOST=mysql
 DATABASE_PORT=3306
-DATABASE_USER=upstreamops
+DATABASE_USER=relaydeck
 DATABASE_PASSWORD=change-me
-DATABASE_NAME=upstreamops
+DATABASE_NAME=relaydeck
 ```
 
 ### 安全与登录
@@ -461,7 +464,7 @@ pnpm build
 
 ## 代理与上游 HTTP 配置
 
-系统设置页可以配置全局代理和上游请求参数。代理默认关闭，协议默认 `http`；上游请求超时默认 `30` 秒，`User-Agent` 默认 `upstream-ops/0.1`。
+系统设置页可以配置全局代理和上游请求参数。代理默认关闭，协议默认 `http`；上游请求超时默认 `30` 秒，`User-Agent` 默认 `relaydeck/0.1`。
 
 配置文件字段：
 
@@ -477,7 +480,7 @@ proxy:
 
 upstream:
   timeoutSeconds: 30
-  userAgent: upstream-ops/0.1
+  userAgent: relaydeck/0.1
 ```
 
 - `proxy.enabled`：是否启用全局代理。
@@ -595,7 +598,7 @@ Webhook 请求体示例：
 ```json
 {
 	"event": "announcement",
-	"subject": "[UpstreamOps] xxx",
+	"subject": "[RelayDeck] xxx",
 	"body": "通知正文",
 	"extra": {}
 }

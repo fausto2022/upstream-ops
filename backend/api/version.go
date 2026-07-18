@@ -11,14 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/global"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/global"
 	"github.com/gin-gonic/gin"
 )
 
 const (
-	githubRepoURL              = "https://github.com/fausto2022/upstream-ops"
-	defaultGitHubLatestRelease = "https://api.github.com/repos/fausto2022/upstream-ops/releases/latest"
+	githubRepoURL              = "https://github.com/fausto2022/relaydeck"
+	defaultGitHubLatestRelease = "https://api.github.com/repos/fausto2022/relaydeck/releases/latest"
 )
 
 var (
@@ -50,7 +50,7 @@ func registerVersion(api *gin.RouterGroup, d *Deps) {
 }
 
 func buildVersionResponse(ctx context.Context, d *Deps, force bool) versionResponse {
-	app := config.AppConfig{Title: "UpstreamOps"}
+	app := config.AppConfig{Title: "RelayDeck"}
 	proxyCfg := config.ProxyConfig{}
 	if d != nil && d.Runtime != nil {
 		if cfg, err := config.LoadFile(d.Runtime.ConfigPath()); err == nil {
@@ -60,7 +60,7 @@ func buildVersionResponse(ctx context.Context, d *Deps, force bool) versionRespo
 	}
 
 	resp := versionResponse{
-		Name:    "upstream-ops",
+		Name:    "relaydeck",
 		Title:   app.Title,
 		Version: global.VERSION,
 		RepoURL: githubRepoURL,
@@ -106,7 +106,7 @@ func fetchLatestGitHubRelease(ctx context.Context, client *http.Client) (string,
 		return "", "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "upstream-ops")
+	req.Header.Set("User-Agent", "relaydeck")
 
 	resp, err := client.Do(req)
 	if err != nil {

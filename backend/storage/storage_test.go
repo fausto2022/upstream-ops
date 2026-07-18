@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -9,6 +10,17 @@ import (
 
 	"gorm.io/gorm"
 )
+
+func TestResolveSQLitePathUsesLegacyDatabaseDuringRenameUpgrade(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "upstream-ops.db")
+	if err := os.WriteFile(legacyPath, []byte("legacy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveSQLitePath(filepath.Join(dir, "relaydeck.db")); got != legacyPath {
+		t.Fatalf("resolveSQLitePath() = %q, want %q", got, legacyPath)
+	}
+}
 
 func openTestDB(t *testing.T) *gorm.DB {
 	t.Helper()

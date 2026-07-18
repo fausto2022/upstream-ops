@@ -1,15 +1,15 @@
-name: upstream-ops
+name: relaydeck
 
 services:
   app:
-    image: ghcr.io/fausto2022/upstream-ops:${IMAGE_TAG:-latest}
+    image: ghcr.io/fausto2022/relaydeck:${IMAGE_TAG:-latest}
     restart: unless-stopped
     command: ["-config", "/app/data/config.yaml"]
     environment:
       TZ: Asia/Shanghai
       SERVER_PORT: 8418
       DATABASE_DRIVER: sqlite
-      DATABASE_PATH: /app/data/upstream-ops.db
+      DATABASE_PATH: /app/data/relaydeck.db
       SERVER_MODE: ${SERVER_MODE:-release}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       APP_SECRET: ${APP_SECRET:?APP_SECRET is required, set it in .env}

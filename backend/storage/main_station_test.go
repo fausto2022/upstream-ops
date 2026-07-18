@@ -81,7 +81,7 @@ func TestEmptyDatabaseCreatesMainStationSchemaWithoutConfiguration(t *testing.T)
 
 func TestMainStationModelsUseMySQLCompatibleUpsertAndIndexes(t *testing.T) {
 	db, err := gorm.Open(mysqlDriver.New(mysqlDriver.Config{
-		DSN:                       "user:password@tcp(127.0.0.1:3306)/upstreamops?charset=utf8mb4&parseTime=True&loc=Local",
+		DSN:                       "user:password@tcp(127.0.0.1:3306)/relaydeck?charset=utf8mb4&parseTime=True&loc=Local",
 		SkipInitializeWithVersion: true,
 	}), &gorm.Config{
 		DryRun:                 true,

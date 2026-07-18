@@ -3,8 +3,8 @@ package api
 import (
 	"testing"
 
-	"github.com/bejix/upstream-ops/backend/connector"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/storage"
 )
 
 func TestApplyRechargeMultiplierToRates(t *testing.T) {

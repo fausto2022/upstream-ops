@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/bejix/upstream-ops/backend/syncer"
+	"github.com/fausto2022/relaydeck/backend/syncer"
 	"github.com/gin-gonic/gin"
 )
 

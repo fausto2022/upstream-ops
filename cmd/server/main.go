@@ -12,25 +12,25 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/api"
-	"github.com/bejix/upstream-ops/backend/auth"
-	"github.com/bejix/upstream-ops/backend/channel"
-	"github.com/bejix/upstream-ops/backend/config"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/logger"
-	"github.com/bejix/upstream-ops/backend/mainstation"
-	"github.com/bejix/upstream-ops/backend/monitor"
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/runtimeconfig"
-	"github.com/bejix/upstream-ops/backend/scheduler"
-	"github.com/bejix/upstream-ops/backend/storage"
-	"github.com/bejix/upstream-ops/backend/syncer"
-	"github.com/bejix/upstream-ops/web"
+	"github.com/fausto2022/relaydeck/backend/api"
+	"github.com/fausto2022/relaydeck/backend/auth"
+	"github.com/fausto2022/relaydeck/backend/channel"
+	"github.com/fausto2022/relaydeck/backend/config"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/logger"
+	"github.com/fausto2022/relaydeck/backend/mainstation"
+	"github.com/fausto2022/relaydeck/backend/monitor"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/runtimeconfig"
+	"github.com/fausto2022/relaydeck/backend/scheduler"
+	"github.com/fausto2022/relaydeck/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/syncer"
+	"github.com/fausto2022/relaydeck/web"
 	"github.com/gin-gonic/gin"
 
 	// 注册 connector 实现。
-	_ "github.com/bejix/upstream-ops/backend/connector/newapi"
-	_ "github.com/bejix/upstream-ops/backend/connector/sub2api"
+	_ "github.com/fausto2022/relaydeck/backend/connector/newapi"
+	_ "github.com/fausto2022/relaydeck/backend/connector/sub2api"
 )
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
 	resolvedConfigPath := config.ResolvePath(*configPath, usedConfigPath)
 
 	log := logger.New(cfg.Log.Level, cfg.Log.Format)
-	log.Info("starting UpstreamOps", "port", cfg.Server.Port, "mode", cfg.Server.Mode)
+	log.Info("starting RelayDeck", "port", cfg.Server.Port, "mode", cfg.Server.Mode)
 
 	if _, err := os.Stat(resolvedConfigPath); errors.Is(err, os.ErrNotExist) {
 		if err := config.Save(resolvedConfigPath, cfg); err != nil {

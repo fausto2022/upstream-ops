@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTheme } from "next-themes"
-import { Activity, Github, Home, LogOut, RefreshCw, ServerCog, Sun, Moon, Settings } from "lucide-react"
+import { Activity, Home, LogOut, RefreshCw, ServerCog, Sun, Moon, Settings } from "lucide-react"
+import { Link, useLocation } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -17,6 +18,7 @@ import { relativeTime } from "@/lib/format"
 import { toast } from "sonner"
 
 export function MonitorHeader() {
+  const location = useLocation()
   const { theme, setTheme } = useTheme()
   const { username, authDisabled, logout } = useAuth()
   const refresh = useTriggerRefresh()
@@ -26,7 +28,7 @@ export function MonitorHeader() {
   const [syncing, setSyncing] = useState(false)
   const [checkingVersion, setCheckingVersion] = useState(false)
 
-  const appTitle = appVersion.data?.title?.trim() || "UpstreamOps"
+  const appTitle = appVersion.data?.title?.trim() || "RelayDeck"
   const version = appVersion.data?.version?.trim()
   const latestVersion = appVersion.data?.latest_version?.trim()
   const updateAvailable = Boolean(appVersion.data?.update_available && latestVersion)
@@ -105,7 +107,7 @@ export function MonitorHeader() {
                 </button>
                 {updateAvailable ? (
                   <a
-                    href={updateURL || "https://github.com/fausto2022/upstream-ops"}
+                    href={updateURL || "https://github.com/fausto2022/relaydeck"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-2 font-medium text-emerald-600 underline-offset-2 hover:text-emerald-700 hover:underline"
@@ -172,32 +174,30 @@ export function MonitorHeader() {
             <TooltipTrigger asChild>
               <Button
                 asChild
-                variant="outline"
-                size="icon"
-                className="size-8 border-border bg-background text-foreground hover:bg-muted"
+                variant={location.pathname === "/" ? "default" : "outline"}
+                size="sm"
+                className={cn("h-8 gap-1.5 px-2", location.pathname !== "/" && "border-border bg-background text-foreground hover:bg-muted")}
                 aria-label="主页"
               >
-                <a href="/"><Home className="size-3.5" /></a>
+                <Link to="/"><Home className="size-3.5" /><span className="hidden lg:inline">主页</span></Link>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              {"主页"}
-            </TooltipContent>
+            <TooltipContent side="bottom" className="text-xs">{"主页"}</TooltipContent>
           </Tooltip>
 
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <Button
                 asChild
-                variant="outline"
+                variant={location.pathname === "/main-station" ? "default" : "outline"}
                 size="sm"
-                className="h-8 gap-1.5 border-border bg-background px-2 text-foreground hover:bg-muted"
+                className={cn("h-8 gap-1.5 px-2", location.pathname === "/main-station" ? "" : "border-border bg-background text-foreground hover:bg-muted")}
                 aria-label="主站"
               >
-                <a href="/main-station">
+                <Link to="/main-station">
                   <ServerCog className="size-3.5" />
                   <span className="hidden lg:inline">主站</span>
-                </a>
+                </Link>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
@@ -210,39 +210,16 @@ export function MonitorHeader() {
             <TooltipTrigger asChild>
               <Button
                 asChild
-                variant="outline"
+                variant={location.pathname === "/settings" ? "default" : "outline"}
                 size="icon"
-                className="size-8 border-border bg-background text-foreground hover:bg-muted"
+                className={cn("size-8", location.pathname === "/settings" ? "" : "border-border bg-background text-foreground hover:bg-muted")}
                 aria-label="系统设置"
               >
-                <a href="/settings"><Settings className="size-3.5" /></a>
+                <Link to="/settings"><Settings className="size-3.5" /></Link>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
               {"系统设置"}
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <Button
-                asChild
-                variant="outline"
-                size="icon"
-                className="size-8 border-border bg-background text-foreground hover:bg-muted"
-                aria-label="GitHub 仓库"
-              >
-                <a
-                  href="https://github.com/fausto2022/upstream-ops"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Github className="size-3.5" />
-                </a>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              {"GitHub · fausto2022/upstream-ops"}
             </TooltipContent>
           </Tooltip>
 

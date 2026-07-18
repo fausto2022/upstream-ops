@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/connector"
-	"github.com/bejix/upstream-ops/backend/connector/sub2api"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/connector"
+	"github.com/fausto2022/relaydeck/backend/connector/sub2api"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"gorm.io/gorm"
 )
 
@@ -699,7 +699,7 @@ func (s *Service) managedAccountRequest(ctx context.Context, pool *storage.MainA
 		Type:           "apikey",
 		Status:         "active",
 		Schedulable:    false,
-		Notes:          fmt.Sprintf("UpstreamOps managed member:%d", member.ID),
+		Notes:          fmt.Sprintf("RelayDeck managed member:%d", member.ID),
 		ProxyID:        member.ProxyID,
 		Concurrency:    member.Concurrency,
 		Priority:       priority,
@@ -725,7 +725,7 @@ func (s *Service) ensureManagedSourceAPIKey(ctx context.Context, pool *storage.M
 		}
 		return secret, nil
 	}
-	name := fmt.Sprintf("UpstreamOps-%s-%d", compactName(pool.Name, 64), member.ID)
+	name := fmt.Sprintf("RelayDeck-%s-%d", compactName(pool.Name, 64), member.ID)
 	key, err := s.channelSvc.CreateAPIKey(ctx, member.SourceChannelID, connector.APIKeyCreateRequest{
 		Name:    name,
 		Group:   member.SourceGroupName,
@@ -945,7 +945,7 @@ func managedAccountName(pool *storage.MainAccountPool, member *storage.MainAccou
 	if name := strings.TrimSpace(member.AccountName); name != "" {
 		return compactName(name, 120)
 	}
-	return fmt.Sprintf("UpstreamOps-%s-%d", compactName(pool.Name, 80), member.ID)
+	return fmt.Sprintf("RelayDeck-%s-%d", compactName(pool.Name, 80), member.ID)
 }
 
 func compactName(value string, max int) string {

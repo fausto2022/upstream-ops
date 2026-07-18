@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bejix/upstream-ops/backend/channel"
-	_ "github.com/bejix/upstream-ops/backend/connector/newapi"
-	_ "github.com/bejix/upstream-ops/backend/connector/sub2api"
-	"github.com/bejix/upstream-ops/backend/crypto"
-	"github.com/bejix/upstream-ops/backend/notify"
-	"github.com/bejix/upstream-ops/backend/storage"
+	"github.com/fausto2022/relaydeck/backend/channel"
+	_ "github.com/fausto2022/relaydeck/backend/connector/newapi"
+	_ "github.com/fausto2022/relaydeck/backend/connector/sub2api"
+	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/notify"
+	"github.com/fausto2022/relaydeck/backend/storage"
 	"gorm.io/gorm"
 )
 
