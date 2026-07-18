@@ -31,6 +31,8 @@ type fakeAdminClient struct {
 	applyBeforeSetError bool
 	deletedAccounts     []int64
 	nextAccountID       int64
+	accountModels       map[int64][]string
+	syncModelCalls      []int64
 }
 
 func (f *fakeAdminClient) Ping(context.Context, sub2api.AdminTarget) error { return f.pingErr }
@@ -118,6 +120,21 @@ func (f *fakeAdminClient) SetAccountSchedulable(_ context.Context, _ sub2api.Adm
 func (f *fakeAdminClient) DeleteAccount(_ context.Context, _ sub2api.AdminTarget, id int64) error {
 	f.deletedAccounts = append(f.deletedAccounts, id)
 	return nil
+}
+func (f *fakeAdminClient) SyncAccountModelsFromUpstream(_ context.Context, _ sub2api.AdminTarget, id int64) ([]string, error) {
+	f.syncModelCalls = append(f.syncModelCalls, id)
+	models := f.accountModels[id]
+	if len(models) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return append([]string(nil), models...), nil
+}
+func (f *fakeAdminClient) ListAccountModels(_ context.Context, _ sub2api.AdminTarget, id int64) ([]string, error) {
+	models := f.accountModels[id]
+	if len(models) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return append([]string(nil), models...), nil
 }
 func (f *fakeAdminClient) TestAccount(context.Context, sub2api.AdminTarget, int64, string) (*sub2api.AdminAccountTestResult, error) {
 	return &sub2api.AdminAccountTestResult{ResponseText: "ok"}, nil

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bejix/upstream-ops/backend/connector"
+	"github.com/bejix/upstream-ops/backend/connector/sub2api"
 	"github.com/bejix/upstream-ops/backend/storage"
 )
 
@@ -85,6 +86,12 @@ func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCat
 	for platform := range s.configuredHealthModels() {
 		platforms[platform] = struct{}{}
 	}
+	snapshots, err := s.store.ListAllAccountSnapshots(false)
+	if err != nil {
+		return nil, err
+	}
+	_, adminTarget, adminAPIKey, adminErr := s.loadAdminTarget()
+	admin := s.adminFactory()
 	for i := range pools {
 		platform := normalizeHealthPlatform(pools[i].Platform)
 		if platform == "" {
@@ -127,9 +134,33 @@ func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCat
 				break
 			}
 		}
+		if len(catalog.Models) == 0 && adminErr == nil {
+			attempts := 0
+			for i := range snapshots {
+				if normalizeHealthPlatform(snapshots[i].Platform) != platform {
+					continue
+				}
+				attempts++
+				catalog.Models, lastErr = admin.SyncAccountModelsFromUpstream(ctx, sub2api.AdminTarget{
+					BaseURL: adminTarget.BaseURL, APIKey: adminAPIKey,
+				}, snapshots[i].RemoteAccountID)
+				if lastErr != nil {
+					catalog.Models, lastErr = admin.ListAccountModels(ctx, sub2api.AdminTarget{
+						BaseURL: adminTarget.BaseURL, APIKey: adminAPIKey,
+					}, snapshots[i].RemoteAccountID)
+				}
+				if lastErr == nil && len(catalog.Models) > 0 {
+					sort.Strings(catalog.Models)
+					break
+				}
+				if attempts >= 3 {
+					break
+				}
+			}
+		}
 		if len(catalog.Models) == 0 {
 			if lastErr != nil {
-				catalog.Error = sanitizeText(lastErr.Error())
+				catalog.Error = sanitizeText(redactSecretError(lastErr, adminAPIKey).Error())
 			} else {
 				catalog.Error = "该平台没有可用于获取模型的账号 API Key"
 			}

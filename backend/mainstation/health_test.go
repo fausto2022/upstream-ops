@@ -164,6 +164,34 @@ func TestGlobalHealthModelCatalogAndInheritance(t *testing.T) {
 	}
 }
 
+func TestHealthModelCatalogUsesUnboundMainStationAccount(t *testing.T) {
+	service, _, admin, _ := newTestService(t)
+	configureTestStation(t, service)
+	admin.groups = []sub2api.AdminGroup{{ID: 12, Name: "Claude", Platform: "anthropic", Status: "active"}}
+	admin.accounts = []sub2api.AdminAccount{{
+		ID: 31, Name: "claude-upstream", Platform: "anthropic", Status: "active", GroupIDs: []int64{12},
+	}}
+	admin.accountModels = map[int64][]string{31: {"claude-sonnet-4-5", "claude-haiku-4-5"}}
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("sync station: %v", err)
+	}
+
+	catalogs, err := service.ListHealthModelCatalogs(context.Background())
+	if err != nil {
+		t.Fatalf("list catalogs: %v", err)
+	}
+	var anthropic *HealthModelCatalog
+	for i := range catalogs {
+		if catalogs[i].Platform == "anthropic" {
+			anthropic = &catalogs[i]
+			break
+		}
+	}
+	if anthropic == nil || anthropic.Error != "" || len(anthropic.Models) != 2 || len(admin.syncModelCalls) != 1 || admin.syncModelCalls[0] != 31 {
+		t.Fatalf("anthropic catalog = %#v, sync calls = %#v", anthropic, admin.syncModelCalls)
+	}
+}
+
 func TestHealthBudgetStopsNonEssentialProbe(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
