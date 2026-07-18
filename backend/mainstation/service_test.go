@@ -239,6 +239,14 @@ func TestBoundMemberIsUniqueAndBecomesOrphaned(t *testing.T) {
 	if _, err := service.Sync(context.Background()); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
+	config, err := service.store.GetConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	config.Enabled = false
+	if err := service.store.SaveConfig(config); err != nil {
+		t.Fatalf("disable main station management: %v", err)
+	}
 	channel := createTestChannel(t, db)
 	groups, err := service.ListGroups(false)
 	if err != nil || len(groups) != 1 {

@@ -216,6 +216,9 @@ func (s *Service) ReconcilePoolRanking(ctx context.Context, poolID uint, source 
 			reconcileErrors = append(reconcileErrors, fmt.Errorf("update member %d scheduling: %w", member.ID, redactSecretError(updateErr, adminAPIKey)))
 			continue
 		}
+		if refreshed, refreshErr := client.GetAccount(ctx, adminTarget, *member.RemoteAccountID); refreshErr == nil {
+			updated = refreshed
+		}
 		if updated != nil {
 			s.saveRemoteSchedulingSnapshot(updated, *member.RemoteAccountID)
 		}
@@ -223,9 +226,6 @@ func (s *Service) ReconcilePoolRanking(ctx context.Context, poolID uint, source 
 			"automatic_priority": desiredPriority,
 			"load_factor":        desiredLoadFactor,
 		}, "automatic scheduling fields applied", "")
-		if _, reconcileErr := s.ReconcileAccount(ctx, *member.RemoteAccountID, source); reconcileErr != nil {
-			reconcileErrors = append(reconcileErrors, fmt.Errorf("reconcile member %d schedulable state: %w", member.ID, reconcileErr))
-		}
 	}
 	return errors.Join(reconcileErrors...)
 }
