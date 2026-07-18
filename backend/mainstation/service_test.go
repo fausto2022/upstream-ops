@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bejix/upstream-ops/backend/connector"
 	"github.com/bejix/upstream-ops/backend/connector/sub2api"
@@ -264,6 +265,66 @@ func TestMainStationGroupsAreDirectAccountWorkspaces(t *testing.T) {
 	}
 	if updated.Enabled || updated.MinimumHealthyAccounts != 2 || updated.MinimumEffectiveConcurrency != 20 || updated.RateSortDirection != "desc" {
 		t.Fatalf("updated workspace = %#v", updated)
+	}
+}
+
+func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
+	service, db, admin, _ := newTestService(t)
+	configureTestStation(t, service)
+	admin.groups = []sub2api.AdminGroup{{ID: 11, Name: "main", RateMultiplier: 1, Status: "active"}}
+	admin.accounts = []sub2api.AdminAccount{{ID: 21, Name: "managed", Status: "active", GroupIDs: []int64{11}}}
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	groups, err := service.ListGroups(false)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("list groups: groups=%#v err=%v", groups, err)
+	}
+	poolID, err := service.GroupPoolID(groups[0].ID)
+	if err != nil {
+		t.Fatalf("resolve group pool: %v", err)
+	}
+	channel := createTestChannel(t, db)
+	remoteAccountID := int64(21)
+	sourceGroupID := int64(301)
+	member := &storage.MainAccountPoolMember{
+		PoolID:          poolID,
+		SourceChannelID: channel.ID,
+		SourceGroupID:   &sourceGroupID,
+		SourceGroupName: "plus",
+		RemoteAccountID: &remoteAccountID,
+		OwnershipMode:   "bound",
+		BindingStatus:   "manual_confirmed",
+		Status:          "active",
+		Enabled:         true,
+	}
+	if err := service.store.CreateMember(member); err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	observedAt := time.Now().Add(-time.Minute).Truncate(time.Second)
+	if _, err := service.rates.Upsert(&storage.RateSnapshot{
+		ChannelID: channel.ID, RemoteGroupID: &sourceGroupID, ModelName: "plus", Ratio: 0.15, LastSeenAt: observedAt,
+	}); err != nil {
+		t.Fatalf("create source rate: %v", err)
+	}
+	accounts, err := service.ListGroupAccounts(groups[0].ID, false)
+	if err != nil || len(accounts) != 1 || accounts[0].Member == nil {
+		t.Fatalf("list group accounts: accounts=%#v err=%v", accounts, err)
+	}
+	if accounts[0].Member.SourceGroupRateMultiplier == nil || *accounts[0].Member.SourceGroupRateMultiplier != 0.15 ||
+		accounts[0].Member.SourceGroupRateObservedAt == nil || !accounts[0].Member.SourceGroupRateObservedAt.Equal(observedAt) {
+		t.Fatalf("source group rate = %#v", accounts[0].Member)
+	}
+
+	updatedAt := time.Now().Truncate(time.Second)
+	if _, err := service.rates.Upsert(&storage.RateSnapshot{
+		ChannelID: channel.ID, RemoteGroupID: &sourceGroupID, ModelName: "plus", Ratio: 0.22, LastSeenAt: updatedAt,
+	}); err != nil {
+		t.Fatalf("update source rate: %v", err)
+	}
+	accounts, err = service.ListGroupAccounts(groups[0].ID, false)
+	if err != nil || accounts[0].Member.SourceGroupRateMultiplier == nil || *accounts[0].Member.SourceGroupRateMultiplier != 0.22 {
+		t.Fatalf("updated source group rate: accounts=%#v err=%v", accounts, err)
 	}
 }
 

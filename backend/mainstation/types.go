@@ -82,30 +82,32 @@ type AccountDTO struct {
 }
 
 type AccountMemberDTO struct {
-	ID                       uint       `json:"id"`
-	AccountName              string     `json:"account_name,omitempty"`
-	OwnershipMode            string     `json:"ownership_mode"`
-	BindingStatus            string     `json:"binding_status"`
-	Status                   string     `json:"status"`
-	Enabled                  bool       `json:"enabled"`
-	Preferred                bool       `json:"preferred"`
-	SourceChannelID          uint       `json:"source_channel_id"`
-	SourceGroupID            *int64     `json:"source_group_id,omitempty"`
-	SourceGroupName          string     `json:"source_group_name,omitempty"`
-	SourceAPIKeyID           *int64     `json:"source_api_key_id,omitempty"`
-	Weight                   int        `json:"weight"`
-	Priority                 int        `json:"priority"`
-	Concurrency              int        `json:"concurrency"`
-	HealthEnabled            bool       `json:"health_enabled"`
-	HealthModel              string     `json:"health_model,omitempty"`
-	HealthIntervalSeconds    int        `json:"health_interval_seconds"`
-	HealthFailureThreshold   int        `json:"health_failure_threshold"`
-	HealthRecoveryThreshold  int        `json:"health_recovery_threshold"`
-	Recent20SuccessRate      *float64   `json:"recent_20_success_rate,omitempty"`
-	LastHealthStatus         string     `json:"last_health_status"`
-	LastHealthAt             *time.Time `json:"last_health_at,omitempty"`
-	ConsecutiveHealthSuccess int        `json:"consecutive_health_success"`
-	ConsecutiveHealthFailure int        `json:"consecutive_health_failure"`
+	ID                        uint       `json:"id"`
+	AccountName               string     `json:"account_name,omitempty"`
+	OwnershipMode             string     `json:"ownership_mode"`
+	BindingStatus             string     `json:"binding_status"`
+	Status                    string     `json:"status"`
+	Enabled                   bool       `json:"enabled"`
+	Preferred                 bool       `json:"preferred"`
+	SourceChannelID           uint       `json:"source_channel_id"`
+	SourceGroupID             *int64     `json:"source_group_id,omitempty"`
+	SourceGroupName           string     `json:"source_group_name,omitempty"`
+	SourceGroupRateMultiplier *float64   `json:"source_group_rate_multiplier,omitempty"`
+	SourceGroupRateObservedAt *time.Time `json:"source_group_rate_observed_at,omitempty"`
+	SourceAPIKeyID            *int64     `json:"source_api_key_id,omitempty"`
+	Weight                    int        `json:"weight"`
+	Priority                  int        `json:"priority"`
+	Concurrency               int        `json:"concurrency"`
+	HealthEnabled             bool       `json:"health_enabled"`
+	HealthModel               string     `json:"health_model,omitempty"`
+	HealthIntervalSeconds     int        `json:"health_interval_seconds"`
+	HealthFailureThreshold    int        `json:"health_failure_threshold"`
+	HealthRecoveryThreshold   int        `json:"health_recovery_threshold"`
+	Recent20SuccessRate       *float64   `json:"recent_20_success_rate,omitempty"`
+	LastHealthStatus          string     `json:"last_health_status"`
+	LastHealthAt              *time.Time `json:"last_health_at,omitempty"`
+	ConsecutiveHealthSuccess  int        `json:"consecutive_health_success"`
+	ConsecutiveHealthFailure  int        `json:"consecutive_health_failure"`
 }
 
 type GroupWorkspaceDTO struct {

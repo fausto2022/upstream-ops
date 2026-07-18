@@ -125,18 +125,20 @@ export default function MainStationPage() {
     }
   }, [])
 
-  const loadAccounts = useCallback(async (groupID: number | null) => {
-    setAccountsLoading(true)
+  const loadAccounts = useCallback(async (groupID: number | null, silent = false) => {
+    if (!silent) setAccountsLoading(true)
     try {
       const result = groupID == null
         ? await apiFetch<MainStationPage<MainStationAccount>>("/main-station/accounts?page=1&page_size=100")
         : await apiFetch<{ items: MainStationAccount[] }>(`/main-station/groups/${groupID}/accounts`)
       setAccounts(result.items)
     } catch (loadError) {
-      toast.error(loadError instanceof Error ? loadError.message : "加载账号失败")
-      setAccounts([])
+      if (!silent) {
+        toast.error(loadError instanceof Error ? loadError.message : "加载账号失败")
+        setAccounts([])
+      }
     } finally {
-      setAccountsLoading(false)
+      if (!silent) setAccountsLoading(false)
     }
   }, [])
 
@@ -161,6 +163,13 @@ export default function MainStationPage() {
     void loadAccounts(selectedGroupID)
     void loadRisk(selectedGroupID)
   }, [config?.configured, loadAccounts, loadRisk, selectedGroupID])
+  useEffect(() => {
+    if (!config?.configured) return
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadAccounts(selectedGroupID, true)
+    }, 10_000)
+    return () => window.clearInterval(timer)
+  }, [config?.configured, loadAccounts, selectedGroupID])
 
   const filteredAccounts = useMemo(() => {
     const keyword = search.trim().toLowerCase()
@@ -423,7 +432,7 @@ export default function MainStationPage() {
                         <TableHead>状态</TableHead>
                         <TableHead>并发</TableHead>
                         <TableHead>优先级</TableHead>
-                        <TableHead>倍率</TableHead>
+                        <TableHead>上游倍率</TableHead>
                         <TableHead>健康</TableHead>
                         <TableHead>连通率</TableHead>
                         <TableHead>来源</TableHead>
@@ -451,7 +460,7 @@ export default function MainStationPage() {
                           <TableCell><ScheduleBadge account={account} /></TableCell>
                           <TableCell>{account.member?.concurrency ?? account.concurrency}</TableCell>
                           <TableCell>{account.member?.priority ?? account.priority}</TableCell>
-                          <TableCell className="tabular-nums">{formatMainStationMultiplier(account.rate_multiplier_micros)}</TableCell>
+                          <TableCell><SourceGroupRate account={account} /></TableCell>
                           <TableCell><HealthBadge account={account} /></TableCell>
                           <TableCell><ConnectivityRate account={account} /></TableCell>
                           <TableCell>
@@ -586,6 +595,23 @@ function ConnectivityRate({ account }: { account: MainStationAccount }) {
   const text = rate === Math.round(rate) ? rate.toFixed(0) : rate.toFixed(1)
   const className = rate >= 95 ? "text-emerald-700" : rate >= 80 ? "text-amber-700" : "text-destructive"
   return <span className={cn("text-sm font-medium tabular-nums", className)} title="最近 20 次有效探测成功率">{text}%</span>
+}
+
+function SourceGroupRate({ account }: { account: MainStationAccount }) {
+  const member = account.member
+  if (!member) return <span className="text-muted-foreground">-</span>
+  const rate = member.source_group_rate_multiplier
+  const groupName = member.source_group_name || (member.source_group_id != null ? `分组 #${member.source_group_id}` : "默认分组")
+  if (rate == null || !Number.isFinite(rate)) {
+    return <span className="text-muted-foreground" title={`来源分组：${groupName}；暂无倍率快照`}>-</span>
+  }
+  const observedAt = relativeTime(member.source_group_rate_observed_at)
+  return (
+    <div className="leading-tight" title={`来源分组：${groupName}；倍率采集于 ${observedAt}`}>
+      <div className="font-medium tabular-nums">{rate.toFixed(2)}</div>
+      <div className="max-w-24 truncate text-xs text-muted-foreground">{groupName}</div>
+    </div>
+  )
 }
 
 function formatMainStationMultiplier(value: number) {

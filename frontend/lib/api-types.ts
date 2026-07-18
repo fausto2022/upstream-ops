@@ -677,6 +677,8 @@ export interface MainStationAccountMember {
   source_channel_id: number
   source_group_id?: number | null
   source_group_name?: string
+  source_group_rate_multiplier?: number | null
+  source_group_rate_observed_at?: string | null
   source_api_key_id?: number | null
   weight: number
   priority: number

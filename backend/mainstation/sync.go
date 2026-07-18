@@ -202,34 +202,59 @@ func (s *Service) accountDTO(item storage.MainStationAccountSnapshot) AccountDTO
 	dto := AccountDTO{MainStationAccountSnapshot: item}
 	if member, err := s.store.FindMemberByRemoteAccountID(item.RemoteAccountID); err == nil {
 		recent20SuccessRate := s.recent20SuccessRate(member.ID)
+		sourceGroupRate, sourceGroupRateObservedAt := s.sourceGroupRate(member)
 		dto.Member = &AccountMemberDTO{
-			ID:                       member.ID,
-			AccountName:              member.AccountName,
-			OwnershipMode:            member.OwnershipMode,
-			BindingStatus:            member.BindingStatus,
-			Status:                   member.Status,
-			Enabled:                  member.Enabled,
-			Preferred:                member.Preferred,
-			SourceChannelID:          member.SourceChannelID,
-			SourceGroupID:            member.SourceGroupID,
-			SourceGroupName:          member.SourceGroupName,
-			SourceAPIKeyID:           member.SourceAPIKeyID,
-			Weight:                   member.Weight,
-			Priority:                 member.Priority,
-			Concurrency:              member.Concurrency,
-			HealthEnabled:            member.HealthEnabled,
-			HealthModel:              member.HealthModel,
-			HealthIntervalSeconds:    member.HealthIntervalSeconds,
-			HealthFailureThreshold:   member.HealthFailureThreshold,
-			HealthRecoveryThreshold:  member.HealthRecoveryThreshold,
-			Recent20SuccessRate:      recent20SuccessRate,
-			LastHealthStatus:         member.LastHealthStatus,
-			LastHealthAt:             member.LastHealthAt,
-			ConsecutiveHealthSuccess: member.ConsecutiveHealthSuccess,
-			ConsecutiveHealthFailure: member.ConsecutiveHealthFailure,
+			ID:                        member.ID,
+			AccountName:               member.AccountName,
+			OwnershipMode:             member.OwnershipMode,
+			BindingStatus:             member.BindingStatus,
+			Status:                    member.Status,
+			Enabled:                   member.Enabled,
+			Preferred:                 member.Preferred,
+			SourceChannelID:           member.SourceChannelID,
+			SourceGroupID:             member.SourceGroupID,
+			SourceGroupName:           member.SourceGroupName,
+			SourceGroupRateMultiplier: sourceGroupRate,
+			SourceGroupRateObservedAt: sourceGroupRateObservedAt,
+			SourceAPIKeyID:            member.SourceAPIKeyID,
+			Weight:                    member.Weight,
+			Priority:                  member.Priority,
+			Concurrency:               member.Concurrency,
+			HealthEnabled:             member.HealthEnabled,
+			HealthModel:               member.HealthModel,
+			HealthIntervalSeconds:     member.HealthIntervalSeconds,
+			HealthFailureThreshold:    member.HealthFailureThreshold,
+			HealthRecoveryThreshold:   member.HealthRecoveryThreshold,
+			Recent20SuccessRate:       recent20SuccessRate,
+			LastHealthStatus:          member.LastHealthStatus,
+			LastHealthAt:              member.LastHealthAt,
+			ConsecutiveHealthSuccess:  member.ConsecutiveHealthSuccess,
+			ConsecutiveHealthFailure:  member.ConsecutiveHealthFailure,
 		}
 	}
 	return dto
+}
+
+func (s *Service) sourceGroupRate(member *storage.MainAccountPoolMember) (*float64, *time.Time) {
+	if s.rates == nil || member == nil {
+		return nil, nil
+	}
+	snapshots, err := s.rates.ListByChannel(member.SourceChannelID)
+	if err != nil {
+		return nil, nil
+	}
+	for i := range snapshots {
+		matchedByID := member.SourceGroupID != nil && snapshots[i].RemoteGroupID != nil &&
+			*member.SourceGroupID == *snapshots[i].RemoteGroupID
+		matchedByName := strings.TrimSpace(member.SourceGroupName) != "" &&
+			strings.EqualFold(strings.TrimSpace(member.SourceGroupName), strings.TrimSpace(snapshots[i].ModelName))
+		if matchedByID || matchedByName {
+			ratio := snapshots[i].Ratio
+			observedAt := snapshots[i].LastSeenAt
+			return &ratio, &observedAt
+		}
+	}
+	return nil, nil
 }
 
 func accountSnapshot(account sub2api.AdminAccount) storage.MainStationAccountSnapshot {
