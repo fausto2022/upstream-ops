@@ -296,6 +296,7 @@ func (s *Service) UpdateConfig(ctx context.Context, in ConfigInput) (*ConfigDTO,
 		return nil, fmt.Errorf("test main station connection: %w", redactSecretError(err, apiKey))
 	}
 	before := *target
+	beforeConfig := *config
 	target.Name = name
 	target.BaseURL = baseURL
 	target.LastCheckStatus = "success"
@@ -352,6 +353,9 @@ func (s *Service) UpdateConfig(ctx context.Context, in ConfigInput) (*ConfigDTO,
 	}
 	if err := s.store.UpdateConfigWithTarget(target, config); err != nil {
 		return nil, err
+	}
+	if err := s.reconcileHealthProtectionPolicy(ctx, &beforeConfig, config, "manual"); err != nil {
+		return nil, fmt.Errorf("reconcile health protection policy: %w", err)
 	}
 	_ = s.appendAudit(nil, nil, nil, "main_station_update", "manual", true, before, target, nil, "", "")
 	return s.GetConfig()

@@ -526,6 +526,66 @@ func TestHealthRecoveryClearsOnlyHealthLockAfterThreshold(t *testing.T) {
 	}
 }
 
+func TestHealthProtectionReconcilesExistingStateAndRequiresAutoRecovery(t *testing.T) {
+	responseOK := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !responseOK {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "rate limited"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"effective_rate_multiplier": 0.8})
+	}))
+	defer server.Close()
+
+	service, db, admin, _ := newTestService(t)
+	member := createHealthMember(t, service, db, admin, server.URL, "")
+	config, err := service.store.GetConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	config.HealthFailureThreshold = 1
+	config.HealthRecoveryThreshold = 2
+	if err := service.store.SaveConfig(config); err != nil {
+		t.Fatalf("set health thresholds: %v", err)
+	}
+	result, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true})
+	if err != nil {
+		t.Fatalf("observe unhealthy member: %v", err)
+	}
+	if result.Member.LastHealthStatus != "unhealthy" || !admin.accounts[0].Schedulable {
+		t.Fatalf("observation state = %#v, schedulable=%v", result.Member, admin.accounts[0].Schedulable)
+	}
+
+	enabled := true
+	if _, err := service.UpdateProtectionPolicy(context.Background(), ProtectionPolicyInput{AutoHealthProtection: &enabled}); err != nil {
+		t.Fatalf("enable health protection: %v", err)
+	}
+	locks, err := service.ListGuardLocks(*member.RemoteAccountID)
+	if err != nil || !guardLockActive(locks, "health") || admin.accounts[0].Schedulable {
+		t.Fatalf("health protection state = locks %#v, schedulable=%v, err=%v", locks, admin.accounts[0].Schedulable, err)
+	}
+
+	responseOK = true
+	for attempt := 1; attempt <= 2; attempt++ {
+		if _, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true}); err != nil {
+			t.Fatalf("recovery attempt %d: %v", attempt, err)
+		}
+	}
+	locks, err = service.ListGuardLocks(*member.RemoteAccountID)
+	if err != nil || !guardLockActive(locks, "health") || admin.accounts[0].Schedulable {
+		t.Fatalf("disabled auto recovery state = locks %#v, schedulable=%v, err=%v", locks, admin.accounts[0].Schedulable, err)
+	}
+
+	if _, err := service.UpdateProtectionPolicy(context.Background(), ProtectionPolicyInput{AutoRecovery: &enabled}); err != nil {
+		t.Fatalf("enable auto recovery: %v", err)
+	}
+	locks, err = service.ListGuardLocks(*member.RemoteAccountID)
+	if err != nil || guardLockActive(locks, "health") || !admin.accounts[0].Schedulable {
+		t.Fatalf("enabled auto recovery state = locks %#v, schedulable=%v, err=%v", locks, admin.accounts[0].Schedulable, err)
+	}
+}
+
 func createHealthMember(t *testing.T, service *Service, db *gorm.DB, admin *fakeAdminClient, upstreamURL, healthPolicy string) *storage.MainAccountPoolMember {
 	t.Helper()
 	configureTestStation(t, service)

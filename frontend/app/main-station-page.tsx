@@ -435,7 +435,7 @@ export default function MainStationPage() {
                         <TableHead>Account</TableHead>
                         <TableHead>状态</TableHead>
                         <TableHead>并发</TableHead>
-                        <TableHead>优先级</TableHead>
+                        <TableHead>实际优先级</TableHead>
                         <TableHead>上游倍率</TableHead>
                         <TableHead>健康</TableHead>
                         <TableHead>连通率</TableHead>
@@ -463,7 +463,7 @@ export default function MainStationPage() {
                           </TableCell>
                           <TableCell><ScheduleBadge account={account} /></TableCell>
                           <TableCell>{account.member?.concurrency ?? account.concurrency}</TableCell>
-                          <TableCell>{account.member?.priority ?? account.priority}</TableCell>
+                          <TableCell><SchedulingPriority account={account} /></TableCell>
                           <TableCell><SourceGroupRate account={account} /></TableCell>
                           <TableCell><HealthBadge account={account} /></TableCell>
                           <TableCell><ConnectivityRate account={account} /></TableCell>
@@ -606,6 +606,20 @@ function ConnectivityRate({ account }: { account: MainStationAccount }) {
   const text = rate === Math.round(rate) ? rate.toFixed(0) : rate.toFixed(1)
   const className = rate >= 95 ? "text-emerald-700" : rate >= 80 ? "text-amber-700" : "text-destructive"
   return <span className={cn("text-sm font-medium tabular-nums", className)} title="最近 20 次有效探测成功率">{text}%</span>
+}
+
+function SchedulingPriority({ account }: { account: MainStationAccount }) {
+  const actualPriority = account.priority > 0 ? account.priority : 1
+  const basePriority = account.member?.priority
+  if (basePriority == null || basePriority === actualPriority) {
+    return <span className="tabular-nums">{actualPriority}</span>
+  }
+  return (
+    <div className="leading-tight" title="系统根据健康状态、人工优先级、成本、连通率和延迟自动调整">
+      <div className="font-medium tabular-nums">{actualPriority}</div>
+      <div className="text-xs text-muted-foreground">基础 {basePriority}</div>
+    </div>
+  )
 }
 
 function SourceGroupRate({ account }: { account: MainStationAccount }) {

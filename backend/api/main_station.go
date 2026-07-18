@@ -96,7 +96,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 			fail(c, http.StatusBadRequest, err)
 			return
 		}
-		result, err := d.MainStation.UpdateProtectionPolicy(in)
+		result, err := d.MainStation.UpdateProtectionPolicy(c.Request.Context(), in)
 		if err != nil {
 			failMainStation(c, err)
 			return

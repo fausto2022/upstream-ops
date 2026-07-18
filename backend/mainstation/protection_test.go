@@ -14,10 +14,10 @@ func TestProtectionPolicyRequiresObservationAndDisablingPreservesLocks(t *testin
 	configureTestStation(t, unobservedService)
 
 	enabled := true
-	if _, err := unobservedService.UpdateProtectionPolicy(ProtectionPolicyInput{AutoMarginProtection: &enabled}); err == nil {
+	if _, err := unobservedService.UpdateProtectionPolicy(context.Background(), ProtectionPolicyInput{AutoMarginProtection: &enabled}); err == nil {
 		t.Fatal("margin protection enabled without observation evidence")
 	}
-	if _, err := unobservedService.UpdateProtectionPolicy(ProtectionPolicyInput{AutoHealthProtection: &enabled}); err == nil {
+	if _, err := unobservedService.UpdateProtectionPolicy(context.Background(), ProtectionPolicyInput{AutoHealthProtection: &enabled}); err == nil {
 		t.Fatal("health protection enabled without observation evidence")
 	}
 
@@ -39,11 +39,11 @@ func TestProtectionPolicyRequiresObservationAndDisablingPreservesLocks(t *testin
 	if _, err := service.ActivateGuardLock(context.Background(), *member.RemoteAccountID, "margin", "risk", nil, "margin"); err != nil {
 		t.Fatalf("activate margin lock: %v", err)
 	}
-	if _, err := service.UpdateProtectionPolicy(ProtectionPolicyInput{AutoMarginProtection: &enabled}); err != nil {
+	if _, err := service.UpdateProtectionPolicy(context.Background(), ProtectionPolicyInput{AutoMarginProtection: &enabled}); err != nil {
 		t.Fatalf("enable observed margin protection: %v", err)
 	}
 	disabled := false
-	if _, err := service.UpdateProtectionPolicy(ProtectionPolicyInput{AutoMarginProtection: &disabled}); err != nil {
+	if _, err := service.UpdateProtectionPolicy(context.Background(), ProtectionPolicyInput{AutoMarginProtection: &disabled}); err != nil {
 		t.Fatalf("disable margin protection: %v", err)
 	}
 	locks, err := service.ListGuardLocks(*member.RemoteAccountID)

@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *Service) UpdateProtectionPolicy(in ProtectionPolicyInput) (*ConfigDTO, error) {
+func (s *Service) UpdateProtectionPolicy(ctx context.Context, in ProtectionPolicyInput) (*ConfigDTO, error) {
 	config, err := s.store.GetConfig()
 	if err != nil {
 		return nil, err
@@ -38,8 +38,65 @@ func (s *Service) UpdateProtectionPolicy(in ProtectionPolicyInput) (*ConfigDTO, 
 	if err := s.store.SaveConfig(config); err != nil {
 		return nil, err
 	}
-	_ = s.appendAudit(nil, nil, nil, "protection_policy_update", "admin", true, before, config, nil, "existing locks were preserved", "")
+	if err := s.reconcileHealthProtectionPolicy(ctx, &before, config, "admin"); err != nil {
+		_ = s.appendAudit(nil, nil, nil, "protection_policy_update", "admin", false, before, config, nil, "policy saved but health state reconciliation failed", sanitizeText(err.Error()))
+		return nil, fmt.Errorf("reconcile health protection policy: %w", err)
+	}
+	_ = s.appendAudit(nil, nil, nil, "protection_policy_update", "admin", true, before, config, nil, "current health locks reconciled; disabling still preserves existing locks", "")
 	return s.GetConfig()
+}
+
+func (s *Service) reconcileHealthProtectionPolicy(ctx context.Context, before, after *storage.MainStationConfig, source string) error {
+	if before == nil || after == nil {
+		return nil
+	}
+	protectionEnabled := !before.AutoHealthProtection && after.AutoHealthProtection
+	recoveryEnabled := !before.AutoRecovery && after.AutoRecovery
+	if !protectionEnabled && !recoveryEnabled {
+		return nil
+	}
+	members, err := s.store.ListAllMembers()
+	if err != nil {
+		return err
+	}
+	var reconcileErrors []error
+	for i := range members {
+		member := &members[i]
+		if member.RemoteAccountID == nil {
+			continue
+		}
+		remoteAccountID := *member.RemoteAccountID
+		if protectionEnabled && member.Enabled && (member.LastHealthStatus == "unhealthy" || member.Status == "quarantined") {
+			if _, lockErr := s.ActivateGuardLock(ctx, remoteAccountID, "health", "member was already unhealthy when automatic health protection was enabled", map[string]any{
+				"pool_id": member.PoolID, "member_id": member.ID, "last_health_status": member.LastHealthStatus,
+			}, source); lockErr != nil {
+				reconcileErrors = append(reconcileErrors, fmt.Errorf("activate member %d health lock: %w", member.ID, lockErr))
+			}
+		}
+		if recoveryEnabled && member.LastHealthStatus == "healthy" {
+			locks, lockErr := s.store.ListActiveGuardLocks(remoteAccountID)
+			if lockErr != nil {
+				reconcileErrors = append(reconcileErrors, fmt.Errorf("list member %d health locks: %w", member.ID, lockErr))
+				continue
+			}
+			if !guardLockActive(locks, "health") {
+				continue
+			}
+			if _, clearErr := s.ClearGuardLock(ctx, remoteAccountID, "health", source); clearErr != nil {
+				reconcileErrors = append(reconcileErrors, fmt.Errorf("clear member %d health lock: %w", member.ID, clearErr))
+			}
+		}
+	}
+	return errors.Join(reconcileErrors...)
+}
+
+func guardLockActive(locks []storage.MainAccountGuardLock, lockType string) bool {
+	for _, item := range locks {
+		if item.Active && item.LockType == lockType {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) ProtectionPreview() (*ProtectionPreview, error) {

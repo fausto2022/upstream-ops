@@ -188,10 +188,8 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 	if err != nil {
 		return nil, err
 	}
-	if oldHealth != newHealth {
-		if rankingErr := s.ReconcilePoolRanking(ctx, pool.ID, "health"); rankingErr != nil && s.log != nil {
-			s.log.Warn("reconcile main station scheduling rank", "err", rankingErr, "pool_id", pool.ID)
-		}
+	if rankingErr := s.ReconcilePoolRanking(ctx, pool.ID, "health"); rankingErr != nil && s.log != nil {
+		s.log.Warn("reconcile main station scheduling rank", "err", rankingErr, "pool_id", pool.ID)
 	}
 	if (newHealth == "unhealthy" && oldHealth != "unhealthy" && oldHealth != "quarantined") ||
 		(newHealth == "healthy" && (oldHealth == "unhealthy" || oldHealth == "quarantined" || oldHealth == "degraded")) {
@@ -228,11 +226,16 @@ func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainA
 		}
 		return "health_lock_applied", nil
 	}
-	if newHealth == "healthy" && (oldHealth == "unhealthy" || oldHealth == "quarantined" || oldHealth == "degraded") {
-		_, err := s.ClearGuardLock(ctx, *member.RemoteAccountID, "health", "health")
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	if (member.Preferred || config.AutoRecovery) && newHealth == "healthy" &&
+		(oldHealth == "unhealthy" || oldHealth == "quarantined" || oldHealth == "degraded") {
+		locks, err := s.store.ListActiveGuardLocks(*member.RemoteAccountID)
+		if err != nil {
+			return "health_lock_clear_failed", err
+		}
+		if !guardLockActive(locks, "health") {
 			return "", nil
 		}
+		_, err = s.ClearGuardLock(ctx, *member.RemoteAccountID, "health", "health")
 		if err != nil {
 			return "health_lock_clear_failed", err
 		}
