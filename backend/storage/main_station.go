@@ -168,6 +168,23 @@ func (r *MainStationStore) FindAccountSnapshot(remoteAccountID int64) (*MainStat
 	return &item, nil
 }
 
+func (r *MainStationStore) UpsertProfitSnapshot(item *MainStationProfitSnapshot) error {
+	item.MainStationID = MainStationSingletonID
+	return r.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "main_station_id"}, {Name: "day"}},
+		DoUpdates: clause.AssignmentColumns([]string{"revenue", "cost", "sampled_at", "updated_at"}),
+	}).Create(item).Error
+}
+
+func (r *MainStationStore) ListProfitSnapshotsSince(day string) ([]MainStationProfitSnapshot, error) {
+	var list []MainStationProfitSnapshot
+	if err := r.db.Where("main_station_id = ? AND day >= ?", MainStationSingletonID, day).
+		Order("day ASC").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 func (r *MainStationStore) ReplaceAccountSnapshots(items []MainStationAccountSnapshot, syncedAt time.Time) ([]int64, error) {
 	missing := make([]int64, 0)
 	err := r.db.Transaction(func(tx *gorm.DB) error {

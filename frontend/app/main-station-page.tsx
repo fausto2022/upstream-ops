@@ -28,7 +28,6 @@ import { StationConfigDialog } from "@/components/main-station/station-config-di
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import {
   DropdownMenu,
@@ -423,64 +422,71 @@ export default function MainStationPage() {
                   {selectedWorkspace ? <Button variant="outline" onClick={() => void handleBulkCheck()}><TestTube2 className="size-4" />批量检测</Button> : null}
                 </div>
 
-                <div className="p-4">
-                  {accountsLoading ? <div className="flex h-36 items-center justify-center"><Spinner /></div> : null}
-                  {!accountsLoading && sortedAccounts.length > 0 ? (
-                    <div className="grid gap-3 xl:grid-cols-2">
-                      {sortedAccounts.map((account) => (
-                        <Card key={account.remote_account_id} className={cn("overflow-hidden border border-border p-4 shadow-none", !account.member && "bg-muted/10", account.member && !account.schedulable && "opacity-80")}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                <span className={cn("size-2 shrink-0 rounded-full", !account.member ? "bg-muted-foreground/40" : account.schedulable ? "bg-emerald-500" : "bg-destructive")} />
-                                <span className="max-w-72 truncate font-semibold" title={account.name}>{account.name}</span>
-                                {account.member?.preferred ? <Badge variant="outline" className="gap-1 text-amber-700"><Star className="size-3 fill-current" />优先调度</Badge> : null}
-                              </div>
-                              <p className="mt-1 text-xs text-muted-foreground">#{account.remote_account_id} · {account.platform || "未知平台"}</p>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Account</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead>实际优先级</TableHead>
+                        <TableHead>上游倍率</TableHead>
+                        <TableHead>健康</TableHead>
+                        <TableHead>连通率</TableHead>
+                        <TableHead>来源</TableHead>
+                        <TableHead className="w-24 text-right">操作</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {accountsLoading ? <EmptyRow columns={8} text="加载中" /> : null}
+                      {!accountsLoading && sortedAccounts.map((account) => (
+                        <TableRow key={account.remote_account_id}>
+                          <TableCell>
+                            <div className="flex max-w-64 items-center gap-1.5">
+                              <span className="truncate font-medium" title={account.name}>{account.name}</span>
+                              {account.member?.preferred ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span aria-label="优先调度" className="shrink-0 text-amber-500"><Star className="size-3.5 fill-current" /></span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>优先调度</TooltipContent>
+                                </Tooltip>
+                              ) : null}
                             </div>
-                            <ScheduleBadge account={account} />
-                          </div>
-
-                          <div className="mt-4 grid grid-cols-2 border-y border-border sm:grid-cols-4">
-                            <AccountMetric label="实际优先级"><SchedulingPriority account={account} /></AccountMetric>
-                            <AccountMetric label="连通率"><ConnectivityRate account={account} /></AccountMetric>
-                            <AccountMetric label="健康状态"><HealthBadge account={account} /></AccountMetric>
-                            <AccountMetric label="上游倍率"><SourceGroupRate account={account} /></AccountMetric>
-                          </div>
-
-                          <div className="flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 py-3 text-sm">
+                            <div className="text-xs text-muted-foreground">#{account.remote_account_id} · {account.platform || "未知平台"}</div>
+                          </TableCell>
+                          <TableCell><ScheduleBadge account={account} /></TableCell>
+                          <TableCell><SchedulingPriority account={account} /></TableCell>
+                          <TableCell><SourceGroupRate account={account} /></TableCell>
+                          <TableCell><HealthBadge account={account} /></TableCell>
+                          <TableCell><ConnectivityRate account={account} /></TableCell>
+                          <TableCell>
                             {account.member ? (
-                              <>
-                                <span className="text-muted-foreground">来源</span>
-                                <span className="font-medium">{channelName(channels, account.member.source_channel_id)}</span>
-                                <span className="text-muted-foreground">→</span>
-                                <span>{selectedWorkspace?.group.name ?? "主站分组"}</span>
-                                {account.member.last_health_status === "unhealthy" ? <span className="w-full text-xs text-destructive">健康探测异常，已按保护策略处理并持续监测。</span> : null}
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground">尚未绑定上游账号，接管时会自动建议关联渠道和分组。</span>
-                            )}
-                          </div>
-
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-                            {busyAccountID === account.remote_account_id ? <Spinner /> : (
-                              <div className="flex flex-wrap items-center gap-1">
+                              <div className="max-w-40 truncate text-sm" title={channelName(channels, account.member.source_channel_id)}>{channelName(channels, account.member.source_channel_id)}</div>
+                            ) : <Badge variant="outline">未接管</Badge>}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {busyAccountID === account.remote_account_id ? <Spinner className="ml-auto" /> : (
+                              <div className="flex justify-end gap-1">
                                 {account.member ? (
                                   <>
-                                    {selectedWorkspace ? <Button variant="outline" size="sm" onClick={() => setHealthHistoryAccount(account)}><History className="size-4" />探测记录</Button> : null}
-                                    <Button variant="outline" size="sm" onClick={() => void handleScheduling(account)}>{account.schedulable ? <Pause className="size-4" /> : <Play className="size-4" />}{account.schedulable ? "停用" : "恢复"}</Button>
-                                    {selectedWorkspace ? <Button variant="outline" size="sm" onClick={() => setEditingAccount(account)}><Pencil className="size-4" />编辑</Button> : null}
+                                    {selectedWorkspace ? <IconButton label="探测记录" onClick={() => setHealthHistoryAccount(account)}><History className="size-4" /></IconButton> : null}
+                                    <IconButton label={account.schedulable ? "停用账号" : "恢复账号"} onClick={() => void handleScheduling(account)}>
+                                      {account.schedulable ? <Pause className="size-4" /> : <Play className="size-4" />}
+                                    </IconButton>
+                                    {selectedWorkspace ? <IconButton label="编辑账号" onClick={() => setEditingAccount(account)}><Pencil className="size-4" /></IconButton> : null}
                                   </>
-                                ) : selectedWorkspace ? <Button size="sm" onClick={() => setMemberOpen(true)}><Link2 className="size-4" />接管账号</Button> : null}
+                                ) : selectedWorkspace ? (
+                                  <IconButton label="接管账号" onClick={() => setMemberOpen(true)}><Link2 className="size-4" /></IconButton>
+                                ) : null}
+                                <AccountMenu account={account} canManage={selectedWorkspace != null} onCheck={handleCheck} onSync={handleSyncAccount} onDelete={handleDelete} />
                               </div>
                             )}
-                            <AccountMenu account={account} canManage={selectedWorkspace != null} onCheck={handleCheck} onSync={handleSyncAccount} onDelete={handleDelete} />
-                          </div>
-                        </Card>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </div>
-                  ) : null}
-                  {!accountsLoading && sortedAccounts.length === 0 ? <div className="flex h-36 items-center justify-center text-sm text-muted-foreground">没有符合条件的账号</div> : null}
+                      {!accountsLoading && filteredAccounts.length === 0 ? <EmptyRow columns={8} text="没有符合条件的账号" /> : null}
+                    </TableBody>
+                  </Table>
                 </div>
               </section>
             </div>
@@ -569,15 +575,6 @@ function ScheduleBadge({ account }: { account: MainStationAccount }) {
   if (account.missing) return <Badge variant="destructive">已丢失</Badge>
   if (!account.member) return <Badge variant="outline">未接管</Badge>
   return account.schedulable ? <Badge className="bg-emerald-600 text-white">调度中</Badge> : <Badge variant="secondary">已停用</Badge>
-}
-
-function AccountMetric({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0 border-b border-border px-3 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 min-w-0">{children}</div>
-    </div>
-  )
 }
 
 function HealthBadge({ account }: { account: MainStationAccount }) {

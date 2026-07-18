@@ -92,6 +92,13 @@ type AdminAccountTestResult struct {
 	ResponseText string
 }
 
+type AdminGroupUsageStat struct {
+	GroupID     int64    `json:"group_id"`
+	GroupName   string   `json:"group_name"`
+	ActualCost  *float64 `json:"actual_cost"`
+	AccountCost *float64 `json:"account_cost"`
+}
+
 type AdminAccountSchedulingUpdate struct {
 	Concurrency int `json:"concurrency"`
 	Priority    int `json:"priority"`
@@ -255,6 +262,24 @@ func (a *AdminClient) ListAllAccounts(ctx context.Context, t AdminTarget) ([]Adm
 		}
 	}
 	return out, nil
+}
+
+func (a *AdminClient) ListGroupUsageStats(ctx context.Context, t AdminTarget, startDate, endDate string) ([]AdminGroupUsageStat, error) {
+	params := url.Values{}
+	params.Set("start_date", strings.TrimSpace(startDate))
+	params.Set("end_date", strings.TrimSpace(endDate))
+	params.Set("timezone", "Asia/Shanghai")
+	body, err := a.getJSON(ctx, t, "/api/v1/admin/dashboard/groups?"+params.Encode())
+	if err != nil {
+		return nil, err
+	}
+	var wrapped struct {
+		Groups []AdminGroupUsageStat `json:"groups"`
+	}
+	if err := json.Unmarshal(body, &wrapped); err != nil {
+		return nil, fmt.Errorf("decode admin group usage stats: %w", err)
+	}
+	return wrapped.Groups, nil
 }
 
 func (a *AdminClient) FindGroupByName(ctx context.Context, t AdminTarget, name string) (*AdminGroup, error) {

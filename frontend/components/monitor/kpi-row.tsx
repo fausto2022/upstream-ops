@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowUpRight, DollarSign, MessageSquare, Wallet } from "lucide-react"
+import { ArrowUpRight, ChartNoAxesCombined, DollarSign, HandCoins, MessageSquare, Wallet } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { useDashboardSummary, useRateChanges } from "@/lib/queries"
@@ -35,6 +35,7 @@ export function KpiRow() {
   const todayTotalCost = data?.today_total_cost ?? 0
   const totalCost = data?.total_cost ?? 0
   const lowest = data?.lowest_balance ?? null
+  const profit = data?.profit ?? null
 
   const todayChangeCount = countTodayChanges(recentChanges.data?.items ?? [])
 
@@ -81,6 +82,36 @@ export function KpiRow() {
       ),
     },
     {
+      label: "今日利润",
+      value: profit?.today_available ? (
+        <span className={cn(profit.today_profit < 0 ? "text-danger" : "text-success")}>{money(profit.today_profit)}</span>
+      ) : "—",
+      icon: HandCoins,
+      iconBg: "bg-success/10",
+      iconColor: "text-success",
+      footer: profit?.today_available ? (
+        <span className="text-muted-foreground">收入 {money(profit.today_revenue)} · 成本 {money(profit.today_cost)}</span>
+      ) : (
+        <span className="text-muted-foreground">等待主站同步采样</span>
+      ),
+    },
+    {
+      label: "最近 7 天利润",
+      value: profit?.available ? (
+        <span className={cn(profit.seven_day_profit < 0 ? "text-danger" : "text-success")}>{money(profit.seven_day_profit)}</span>
+      ) : "—",
+      icon: ChartNoAxesCombined,
+      iconBg: "bg-brand/10",
+      iconColor: "text-brand",
+      footer: profit?.available ? (
+        <span className="text-muted-foreground">
+          {profit.complete ? "7 天完整" : `已采样 ${profit.sampled_days}/7 天`} · 收入 {money(profit.seven_day_revenue)} · 成本 {money(profit.seven_day_cost)}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">等待最近 7 天回填</span>
+      ),
+    },
+    {
       label: "渠道状态",
       value: (
         <span>
@@ -123,7 +154,7 @@ export function KpiRow() {
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
       {kpis.map((k) => (
         <Card
           key={k.label}

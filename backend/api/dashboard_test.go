@@ -17,6 +17,7 @@ import (
 	"github.com/fausto2022/relaydeck/backend/connector"
 	_ "github.com/fausto2022/relaydeck/backend/connector/sub2api"
 	"github.com/fausto2022/relaydeck/backend/crypto"
+	"github.com/fausto2022/relaydeck/backend/mainstation"
 	"github.com/fausto2022/relaydeck/backend/monitor"
 	"github.com/fausto2022/relaydeck/backend/notify"
 	"github.com/fausto2022/relaydeck/backend/progress"
@@ -109,6 +110,34 @@ func TestDashboardSummaryIncludesCosts(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("sync announcements: %v", err)
 	}
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatalf("load timezone: %v", err)
+	}
+	today := time.Now().In(location)
+	for _, snapshot := range []storage.MainStationProfitSnapshot{
+		{Day: today.Format("2006-01-02"), Revenue: 10, Cost: 6, SampledAt: today},
+		{Day: today.AddDate(0, 0, -1).Format("2006-01-02"), Revenue: 7, Cost: 5, SampledAt: today},
+	} {
+		if err := storage.NewMainStationStore(db).UpsertProfitSnapshot(&snapshot); err != nil {
+			t.Fatalf("save profit snapshot: %v", err)
+		}
+	}
+	mainStationCipher, err := crypto.NewCipher("dashboard-profit-test")
+	if err != nil {
+		t.Fatalf("new main station cipher: %v", err)
+	}
+	mainStationService := mainstation.New(
+		storage.NewMainStationStore(db),
+		storage.NewUpstreamSyncTargets(db),
+		storage.NewUpstreamSyncTargetGroups(db),
+		channels,
+		rates,
+		storage.NewUpstreamSyncManagedAccounts(db),
+		mainStationCipher,
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
 
 	r := gin.New()
 	api := r.Group("/api")
@@ -117,6 +146,7 @@ func TestDashboardSummaryIncludesCosts(t *testing.T) {
 		Notifies:      notifies,
 		Announcements: announcements,
 		Rates:         rates,
+		MainStation:   mainStationService,
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/dashboard/summary", nil)
@@ -136,6 +166,11 @@ func TestDashboardSummaryIncludesCosts(t *testing.T) {
 				TotalCost float64 `json:"total_cost"`
 			} `json:"channels"`
 			RecentRateChanges []rateChangeOutput `json:"recent_rate_changes"`
+			Profit            struct {
+				TodayProfit    float64 `json:"today_profit"`
+				SevenDayProfit float64 `json:"seven_day_profit"`
+				SampledDays    int     `json:"sampled_days"`
+			} `json:"profit"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -152,6 +187,9 @@ func TestDashboardSummaryIncludesCosts(t *testing.T) {
 	}
 	if len(resp.Data.RecentRateChanges) != 1 {
 		t.Fatalf("recent rate changes = %#v", resp.Data.RecentRateChanges)
+	}
+	if resp.Data.Profit.TodayProfit != 4 || resp.Data.Profit.SevenDayProfit != 6 || resp.Data.Profit.SampledDays != 2 {
+		t.Fatalf("profit summary = %#v", resp.Data.Profit)
 	}
 	change := resp.Data.RecentRateChanges[0]
 	if change.OldRatio == nil || *change.OldRatio != 0.0692 || change.NewRatio != 0.04 {

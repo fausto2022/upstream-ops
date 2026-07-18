@@ -71,6 +71,20 @@ type MainStationAccountSnapshot struct {
 
 func (MainStationAccountSnapshot) TableName() string { return "main_station_account_snapshots" }
 
+// MainStationProfitSnapshot 保存主站按自然日汇总的实际收入与账号成本。
+type MainStationProfitSnapshot struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	MainStationID uint      `gorm:"not null;uniqueIndex:idx_main_station_profit_day" json:"main_station_id"`
+	Day           string    `gorm:"size:10;not null;uniqueIndex:idx_main_station_profit_day" json:"day"`
+	Revenue       float64   `gorm:"not null" json:"revenue"`
+	Cost          float64   `gorm:"not null" json:"cost"`
+	SampledAt     time.Time `gorm:"not null;index" json:"sampled_at"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func (MainStationProfitSnapshot) TableName() string { return "main_station_profit_snapshots" }
+
 // MainAccountPool 是 RelayDeck 的逻辑账号池，不对应单条远端 Account。
 type MainAccountPool struct {
 	ID                          uint       `gorm:"primaryKey" json:"id"`

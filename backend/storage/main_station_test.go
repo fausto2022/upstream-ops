@@ -58,6 +58,7 @@ func TestEmptyDatabaseCreatesMainStationSchemaWithoutConfiguration(t *testing.T)
 	models := []any{
 		&MainStationConfig{},
 		&MainStationAccountSnapshot{},
+		&MainStationProfitSnapshot{},
 		&MainAccountPool{},
 		&MainAccountPoolMember{},
 		&MainAccountHealthCheck{},

@@ -175,6 +175,17 @@ func TestAdminClientUsesAPIKeyAndDecodesAccountWrites(t *testing.T) {
 			"data": map[string]any{"101": 0.9, "102": 0.8, "total": 2},
 		})
 	})
+	mux.HandleFunc("/api/v1/admin/dashboard/groups", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("start_date") != "2026-07-18" || r.URL.Query().Get("end_date") != "2026-07-18" || r.URL.Query().Get("timezone") != "Asia/Shanghai" {
+			t.Fatalf("group usage query = %v", r.URL.Query())
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{"groups": []map[string]any{
+				{"group_id": 1, "group_name": "g1", "actual_cost": 12.5, "account_cost": 8.25},
+			}},
+		})
+	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -193,6 +204,13 @@ func TestAdminClientUsesAPIKeyAndDecodesAccountWrites(t *testing.T) {
 	}
 	if len(multipliers) != 2 || multipliers[0] != 0.8 || multipliers[1] != 0.9 {
 		t.Fatalf("multipliers = %#v", multipliers)
+	}
+	usage, err := client.ListGroupUsageStats(context.Background(), target, "2026-07-18", "2026-07-18")
+	if err != nil {
+		t.Fatalf("ListGroupUsageStats: %v", err)
+	}
+	if len(usage) != 1 || usage[0].ActualCost == nil || *usage[0].ActualCost != 12.5 || usage[0].AccountCost == nil || *usage[0].AccountCost != 8.25 {
+		t.Fatalf("group usage = %#v", usage)
 	}
 	proxies, err := client.ListProxies(context.Background(), target)
 	if err != nil {

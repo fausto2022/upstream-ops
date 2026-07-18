@@ -82,6 +82,17 @@ func dashboardSummary(c *gin.Context, d *Deps) {
 		fail(c, http.StatusInternalServerError, err)
 		return
 	}
+	var profit any
+	if d.MainStation != nil {
+		profitSummary, profitErr := d.MainStation.ProfitSummary(7)
+		if profitErr != nil {
+			if d.Log != nil {
+				d.Log.Warn("load main station profit summary", "err", profitErr)
+			}
+		} else {
+			profit = profitSummary
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
@@ -94,6 +105,7 @@ func dashboardSummary(c *gin.Context, d *Deps) {
 			"lowest_balance":      lowest,
 			"channels":            stats,
 			"recent_rate_changes": rateChangeOutputs(recentChanges, channels),
+			"profit":              profit,
 		},
 	})
 }

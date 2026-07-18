@@ -40,7 +40,7 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	}
 	adminTarget := sub2api.AdminTarget{BaseURL: target.BaseURL, APIKey: apiKey}
 	client := s.adminFactory()
-	syncedAt := time.Now()
+	syncedAt := s.now()
 	groups, err := client.ListGroups(ctx, adminTarget, true)
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("sync main station groups: %w", err))
@@ -110,6 +110,7 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("save main station account snapshots: %w", err))
 	}
+	s.syncProfitSnapshots(ctx, client, adminTarget, syncedAt)
 	orphanedMembers, err := s.store.MarkMembersOrphaned(missingAccounts)
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("mark orphaned main station members: %w", err))

@@ -223,6 +223,20 @@ export interface DashboardChannelStat {
   last_error?: string
 }
 
+export interface DashboardProfitSummary {
+  available: boolean
+  today_available: boolean
+  today_revenue: number
+  today_cost: number
+  today_profit: number
+  seven_day_revenue: number
+  seven_day_cost: number
+  seven_day_profit: number
+  sampled_days: number
+  complete: boolean
+  last_sampled_at?: string
+}
+
 export interface DashboardSummary {
   total_channels: number
   active_channels: number
@@ -233,6 +247,7 @@ export interface DashboardSummary {
   lowest_balance: DashboardLowest | null
   channels: DashboardChannelStat[]
   recent_rate_changes: RateChangeLog[]
+  profit?: DashboardProfitSummary | null
 }
 
 export interface BalanceTrendPoint {

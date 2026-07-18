@@ -156,6 +156,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&MainStationConfig{},
 		&MainStationMigrationState{},
 		&MainStationAccountSnapshot{},
+		&MainStationProfitSnapshot{},
 		&MainAccountPool{},
 		&MainAccountPoolGroup{},
 		&MainAccountPoolMember{},

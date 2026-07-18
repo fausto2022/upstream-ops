@@ -1434,7 +1434,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="flex h-full min-w-0 flex-col gap-2">
       <div className="space-y-1">
         <Label className="text-xs font-medium text-foreground">{label}</Label>
         {description ? (
@@ -1443,7 +1443,7 @@ function Field({
           </p>
         ) : null}
       </div>
-      {children}
+      <div className="mt-auto">{children}</div>
     </div>
   );
 }
