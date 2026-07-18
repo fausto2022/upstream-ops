@@ -19,38 +19,42 @@ type MigrationStateDTO struct {
 }
 
 type ConfigDTO struct {
-	Configured             bool               `json:"configured"`
-	ID                     uint               `json:"id,omitempty"`
-	TargetID               uint               `json:"target_id,omitempty"`
-	Name                   string             `json:"name,omitempty"`
-	BaseURL                string             `json:"base_url,omitempty"`
-	HasAdminAPIKey         bool               `json:"has_admin_api_key"`
-	Enabled                bool               `json:"enabled"`
-	LastSyncStatus         string             `json:"last_sync_status,omitempty"`
-	LastSyncAt             *time.Time         `json:"last_sync_at,omitempty"`
-	LastSyncError          string             `json:"last_sync_error,omitempty"`
-	AutoMarginProtection   bool               `json:"auto_margin_protection"`
-	AutoHealthProtection   bool               `json:"auto_health_protection"`
-	AutoRecovery           bool               `json:"auto_recovery"`
-	HealthModels           map[string]string  `json:"health_models"`
-	HealthIntervalSeconds  int                `json:"health_interval_seconds"`
-	ObservationEvaluatedAt *time.Time         `json:"observation_evaluated_at,omitempty"`
-	HealthObservedAt       *time.Time         `json:"health_observed_at,omitempty"`
-	MarginObservedAt       *time.Time         `json:"margin_observed_at,omitempty"`
-	Migration              *MigrationStateDTO `json:"migration,omitempty"`
+	Configured              bool               `json:"configured"`
+	ID                      uint               `json:"id,omitempty"`
+	TargetID                uint               `json:"target_id,omitempty"`
+	Name                    string             `json:"name,omitempty"`
+	BaseURL                 string             `json:"base_url,omitempty"`
+	HasAdminAPIKey          bool               `json:"has_admin_api_key"`
+	Enabled                 bool               `json:"enabled"`
+	LastSyncStatus          string             `json:"last_sync_status,omitempty"`
+	LastSyncAt              *time.Time         `json:"last_sync_at,omitempty"`
+	LastSyncError           string             `json:"last_sync_error,omitempty"`
+	AutoMarginProtection    bool               `json:"auto_margin_protection"`
+	AutoHealthProtection    bool               `json:"auto_health_protection"`
+	AutoRecovery            bool               `json:"auto_recovery"`
+	HealthModels            map[string]string  `json:"health_models"`
+	HealthIntervalSeconds   int                `json:"health_interval_seconds"`
+	HealthFailureThreshold  int                `json:"health_failure_threshold"`
+	HealthRecoveryThreshold int                `json:"health_recovery_threshold"`
+	ObservationEvaluatedAt  *time.Time         `json:"observation_evaluated_at,omitempty"`
+	HealthObservedAt        *time.Time         `json:"health_observed_at,omitempty"`
+	MarginObservedAt        *time.Time         `json:"margin_observed_at,omitempty"`
+	Migration               *MigrationStateDTO `json:"migration,omitempty"`
 }
 
 type ConfigInput struct {
-	TargetID              uint              `json:"target_id,omitempty"`
-	Name                  string            `json:"name"`
-	BaseURL               string            `json:"base_url"`
-	AdminAPIKey           string            `json:"admin_api_key"`
-	Enabled               *bool             `json:"enabled,omitempty"`
-	AutoMarginProtection  *bool             `json:"auto_margin_protection,omitempty"`
-	AutoHealthProtection  *bool             `json:"auto_health_protection,omitempty"`
-	AutoRecovery          *bool             `json:"auto_recovery,omitempty"`
-	HealthModels          map[string]string `json:"health_models,omitempty"`
-	HealthIntervalSeconds *int              `json:"health_interval_seconds,omitempty"`
+	TargetID                uint              `json:"target_id,omitempty"`
+	Name                    string            `json:"name"`
+	BaseURL                 string            `json:"base_url"`
+	AdminAPIKey             string            `json:"admin_api_key"`
+	Enabled                 *bool             `json:"enabled,omitempty"`
+	AutoMarginProtection    *bool             `json:"auto_margin_protection,omitempty"`
+	AutoHealthProtection    *bool             `json:"auto_health_protection,omitempty"`
+	AutoRecovery            *bool             `json:"auto_recovery,omitempty"`
+	HealthModels            map[string]string `json:"health_models,omitempty"`
+	HealthIntervalSeconds   *int              `json:"health_interval_seconds,omitempty"`
+	HealthFailureThreshold  *int              `json:"health_failure_threshold,omitempty"`
+	HealthRecoveryThreshold *int              `json:"health_recovery_threshold,omitempty"`
 }
 
 type HealthModelCatalog struct {
@@ -95,6 +99,8 @@ type AccountMemberDTO struct {
 	HealthEnabled            bool       `json:"health_enabled"`
 	HealthModel              string     `json:"health_model,omitempty"`
 	HealthIntervalSeconds    int        `json:"health_interval_seconds"`
+	HealthFailureThreshold   int        `json:"health_failure_threshold"`
+	HealthRecoveryThreshold  int        `json:"health_recovery_threshold"`
 	Recent20SuccessRate      *float64   `json:"recent_20_success_rate,omitempty"`
 	LastHealthStatus         string     `json:"last_health_status"`
 	LastHealthAt             *time.Time `json:"last_health_at,omitempty"`
@@ -154,28 +160,30 @@ type PoolDTO struct {
 }
 
 type MemberInput struct {
-	AccountName            string   `json:"account_name"`
-	OwnershipMode          string   `json:"ownership_mode"`
-	SourceChannelID        uint     `json:"source_channel_id"`
-	SourceGroupID          *int64   `json:"source_group_id,omitempty"`
-	SourceGroupName        string   `json:"source_group_name,omitempty"`
-	SourceAPIKeyID         *int64   `json:"source_api_key_id,omitempty"`
-	RemoteAccountID        *int64   `json:"remote_account_id,omitempty"`
-	ManualBindingConfirmed bool     `json:"manual_binding_confirmed"`
-	Enabled                *bool    `json:"enabled,omitempty"`
-	Preferred              *bool    `json:"preferred,omitempty"`
-	ProxyID                *int64   `json:"proxy_id,omitempty"`
-	Weight                 int      `json:"weight"`
-	Priority               int      `json:"priority"`
-	Concurrency            int      `json:"concurrency"`
-	RateConvertMode        string   `json:"rate_convert_mode"`
-	RateConvertValue       float64  `json:"rate_convert_value"`
-	CostAdjustment         float64  `json:"cost_adjustment"`
-	ManualCostMultiplier   *float64 `json:"manual_cost_multiplier,omitempty"`
-	HealthEnabled          *bool    `json:"health_enabled,omitempty"`
-	HealthModel            string   `json:"health_model,omitempty"`
-	HealthIntervalSeconds  *int     `json:"health_interval_seconds,omitempty"`
-	HealthAPIMode          string   `json:"health_api_mode,omitempty"`
+	AccountName             string   `json:"account_name"`
+	OwnershipMode           string   `json:"ownership_mode"`
+	SourceChannelID         uint     `json:"source_channel_id"`
+	SourceGroupID           *int64   `json:"source_group_id,omitempty"`
+	SourceGroupName         string   `json:"source_group_name,omitempty"`
+	SourceAPIKeyID          *int64   `json:"source_api_key_id,omitempty"`
+	RemoteAccountID         *int64   `json:"remote_account_id,omitempty"`
+	ManualBindingConfirmed  bool     `json:"manual_binding_confirmed"`
+	Enabled                 *bool    `json:"enabled,omitempty"`
+	Preferred               *bool    `json:"preferred,omitempty"`
+	ProxyID                 *int64   `json:"proxy_id,omitempty"`
+	Weight                  int      `json:"weight"`
+	Priority                int      `json:"priority"`
+	Concurrency             int      `json:"concurrency"`
+	RateConvertMode         string   `json:"rate_convert_mode"`
+	RateConvertValue        float64  `json:"rate_convert_value"`
+	CostAdjustment          float64  `json:"cost_adjustment"`
+	ManualCostMultiplier    *float64 `json:"manual_cost_multiplier,omitempty"`
+	HealthEnabled           *bool    `json:"health_enabled,omitempty"`
+	HealthModel             string   `json:"health_model,omitempty"`
+	HealthIntervalSeconds   *int     `json:"health_interval_seconds,omitempty"`
+	HealthFailureThreshold  *int     `json:"health_failure_threshold,omitempty"`
+	HealthRecoveryThreshold *int     `json:"health_recovery_threshold,omitempty"`
+	HealthAPIMode           string   `json:"health_api_mode,omitempty"`
 }
 
 type DeleteMemberInput struct {

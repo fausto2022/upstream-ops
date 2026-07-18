@@ -192,13 +192,20 @@ func TestConfigIsSingletonAndConnectionErrorIsRedacted(t *testing.T) {
 	if config.HealthIntervalSeconds != defaultHealthIntervalSeconds {
 		t.Fatalf("default health interval = %d", config.HealthIntervalSeconds)
 	}
+	if config.HealthFailureThreshold != defaultHealthFailureThreshold || config.HealthRecoveryThreshold != defaultHealthRecoveryThreshold {
+		t.Fatalf("default health thresholds = %d/%d", config.HealthFailureThreshold, config.HealthRecoveryThreshold)
+	}
 	interval := 60
-	updated, err := service.UpdateConfig(context.Background(), ConfigInput{HealthIntervalSeconds: &interval})
+	failureThreshold := 20
+	recoveryThreshold := 5
+	updated, err := service.UpdateConfig(context.Background(), ConfigInput{
+		HealthIntervalSeconds: &interval, HealthFailureThreshold: &failureThreshold, HealthRecoveryThreshold: &recoveryThreshold,
+	})
 	if err != nil {
 		t.Fatalf("update health interval: %v", err)
 	}
-	if updated.HealthIntervalSeconds != interval {
-		t.Fatalf("updated health interval = %d", updated.HealthIntervalSeconds)
+	if updated.HealthIntervalSeconds != interval || updated.HealthFailureThreshold != failureThreshold || updated.HealthRecoveryThreshold != recoveryThreshold {
+		t.Fatalf("updated health strategy = %#v", updated)
 	}
 	invalidInterval := 29
 	if _, err := service.UpdateConfig(context.Background(), ConfigInput{HealthIntervalSeconds: &invalidInterval}); err == nil {
@@ -412,15 +419,20 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if len(admin.schedulableCalls) != 1 || !admin.schedulableCalls[0] {
 		t.Fatalf("schedulable calls = %#v", admin.schedulableCalls)
 	}
+	healthInterval := 1
+	healthFailureThreshold := 20
+	healthRecoveryThreshold := 4
 	updated, err := service.UpdateMember(context.Background(), pool.ID, member.ID, MemberInput{
 		AccountName: member.AccountName, SourceChannelID: member.SourceChannelID, SourceGroupID: member.SourceGroupID,
 		SourceGroupName: member.SourceGroupName, Enabled: boolPtr(true), HealthEnabled: boolPtr(true),
-		HealthAPIMode: "openai_chat", Priority: 9, Concurrency: 37,
+		HealthAPIMode: "openai_chat", Priority: 9, Concurrency: 37, HealthIntervalSeconds: &healthInterval,
+		HealthFailureThreshold: &healthFailureThreshold, HealthRecoveryThreshold: &healthRecoveryThreshold,
 	})
 	if err != nil {
 		t.Fatalf("update managed member: %v", err)
 	}
-	if updated.Concurrency != 37 || updated.Priority != 9 || updated.Weight != 37 {
+	if updated.Concurrency != 37 || updated.Priority != 9 || updated.Weight != 37 || updated.HealthIntervalSeconds != 1 ||
+		updated.HealthFailureThreshold != 20 || updated.HealthRecoveryThreshold != 4 {
 		t.Fatalf("updated managed member = %#v", updated)
 	}
 	if len(admin.updateRequests) != 1 || admin.updateRequests[0].Concurrency != 37 || admin.updateRequests[0].Priority != 1 || admin.updateRequests[0].LoadFactor != 37 {

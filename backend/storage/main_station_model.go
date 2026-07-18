@@ -9,22 +9,24 @@ const (
 
 // MainStationConfig 将一条现有目标站点提升为唯一 Sub2API 主站。
 type MainStationConfig struct {
-	ID                     uint       `gorm:"primaryKey;check:id = 1" json:"id"`
-	TargetID               uint       `gorm:"not null;uniqueIndex" json:"target_id"`
-	Enabled                bool       `gorm:"not null;default:true" json:"enabled"`
-	LastSyncStatus         string     `gorm:"size:32" json:"last_sync_status,omitempty"`
-	LastSyncAt             *time.Time `json:"last_sync_at,omitempty"`
-	LastSyncError          string     `gorm:"type:text" json:"last_sync_error,omitempty"`
-	AutoMarginProtection   bool       `gorm:"not null;default:false" json:"auto_margin_protection"`
-	AutoHealthProtection   bool       `gorm:"not null;default:false" json:"auto_health_protection"`
-	AutoRecovery           bool       `gorm:"not null;default:false" json:"auto_recovery"`
-	HealthModelsJSON       string     `gorm:"type:text;not null;default:'{}'" json:"-"`
-	HealthIntervalSeconds  int        `gorm:"not null;default:300" json:"health_interval_seconds"`
-	ObservationEvaluatedAt *time.Time `json:"observation_evaluated_at,omitempty"`
-	HealthObservedAt       *time.Time `json:"health_observed_at,omitempty"`
-	MarginObservedAt       *time.Time `json:"margin_observed_at,omitempty"`
-	CreatedAt              time.Time  `json:"created_at"`
-	UpdatedAt              time.Time  `json:"updated_at"`
+	ID                      uint       `gorm:"primaryKey;check:id = 1" json:"id"`
+	TargetID                uint       `gorm:"not null;uniqueIndex" json:"target_id"`
+	Enabled                 bool       `gorm:"not null;default:true" json:"enabled"`
+	LastSyncStatus          string     `gorm:"size:32" json:"last_sync_status,omitempty"`
+	LastSyncAt              *time.Time `json:"last_sync_at,omitempty"`
+	LastSyncError           string     `gorm:"type:text" json:"last_sync_error,omitempty"`
+	AutoMarginProtection    bool       `gorm:"not null;default:false" json:"auto_margin_protection"`
+	AutoHealthProtection    bool       `gorm:"not null;default:false" json:"auto_health_protection"`
+	AutoRecovery            bool       `gorm:"not null;default:false" json:"auto_recovery"`
+	HealthModelsJSON        string     `gorm:"type:text;not null;default:'{}'" json:"-"`
+	HealthIntervalSeconds   int        `gorm:"not null;default:30" json:"health_interval_seconds"`
+	HealthFailureThreshold  int        `gorm:"not null;default:10" json:"health_failure_threshold"`
+	HealthRecoveryThreshold int        `gorm:"not null;default:3" json:"health_recovery_threshold"`
+	ObservationEvaluatedAt  *time.Time `json:"observation_evaluated_at,omitempty"`
+	HealthObservedAt        *time.Time `json:"health_observed_at,omitempty"`
+	MarginObservedAt        *time.Time `json:"margin_observed_at,omitempty"`
+	CreatedAt               time.Time  `json:"created_at"`
+	UpdatedAt               time.Time  `json:"updated_at"`
 }
 
 func (MainStationConfig) TableName() string { return "main_station_configs" }
@@ -124,6 +126,8 @@ type MainAccountPoolMember struct {
 	HealthEnabled            bool       `gorm:"not null;default:true" json:"health_enabled"`
 	HealthModel              string     `gorm:"size:256;not null;default:''" json:"health_model,omitempty"`
 	HealthIntervalSeconds    int        `gorm:"not null;default:0" json:"health_interval_seconds"`
+	HealthFailureThreshold   int        `gorm:"not null;default:0" json:"health_failure_threshold"`
+	HealthRecoveryThreshold  int        `gorm:"not null;default:0" json:"health_recovery_threshold"`
 	HealthAPIMode            string     `gorm:"size:32;not null;default:'openai_chat'" json:"health_api_mode"`
 	LastHealthStatus         string     `gorm:"size:32;not null;default:'unknown';index" json:"last_health_status"`
 	LastHealthAt             *time.Time `json:"last_health_at,omitempty"`

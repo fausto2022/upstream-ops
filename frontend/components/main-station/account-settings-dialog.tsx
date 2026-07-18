@@ -45,6 +45,8 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
   const [healthEnabled, setHealthEnabled] = useState(true)
   const [healthModel, setHealthModel] = useState("")
   const [healthInterval, setHealthInterval] = useState("")
+  const [healthFailureThreshold, setHealthFailureThreshold] = useState("")
+  const [healthRecoveryThreshold, setHealthRecoveryThreshold] = useState("")
   const [modelCatalogs, setModelCatalogs] = useState<MainStationHealthModelCatalog[]>([])
   const [enabled, setEnabled] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -57,6 +59,8 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
     setHealthEnabled(account.member.health_enabled)
     setHealthModel(account.member.health_model ?? "")
     setHealthInterval(account.member.health_interval_seconds > 0 ? String(account.member.health_interval_seconds) : "")
+    setHealthFailureThreshold(account.member.health_failure_threshold > 0 ? String(account.member.health_failure_threshold) : "")
+    setHealthRecoveryThreshold(account.member.health_recovery_threshold > 0 ? String(account.member.health_recovery_threshold) : "")
     setEnabled(account.member.enabled)
     setModelCatalogs([])
     void apiFetch<MainStationHealthModelCatalog[]>("/main-station/health-models")
@@ -79,8 +83,15 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
       return
     }
     const healthIntervalSeconds = healthInterval === "" ? 0 : Number(healthInterval)
-    if (healthIntervalSeconds !== 0 && (healthIntervalSeconds < 30 || healthIntervalSeconds > 86400 || healthIntervalSeconds % 30 !== 0)) {
-      toast.error("账号探活间隔必须是 30 到 86400 秒之间的 30 秒整数倍")
+    if (healthIntervalSeconds !== 0 && (healthIntervalSeconds < 1 || healthIntervalSeconds > 86400)) {
+      toast.error("账号探活间隔必须在 1 到 86400 秒之间")
+      return
+    }
+    const failureThreshold = healthFailureThreshold === "" ? 0 : Number(healthFailureThreshold)
+    const recoveryThreshold = healthRecoveryThreshold === "" ? 0 : Number(healthRecoveryThreshold)
+    if ((failureThreshold !== 0 && (failureThreshold < 1 || failureThreshold > 100)) ||
+      (recoveryThreshold !== 0 && (recoveryThreshold < 1 || recoveryThreshold > 100))) {
+      toast.error("账号失败和恢复次数必须在 1 到 100 之间")
       return
     }
     setBusy(true)
@@ -99,6 +110,8 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
           health_enabled: healthEnabled,
           health_model: healthModel.trim(),
           health_interval_seconds: healthIntervalSeconds,
+          health_failure_threshold: failureThreshold,
+          health_recovery_threshold: recoveryThreshold,
           health_api_mode: "openai_chat",
         }),
       })
@@ -150,12 +163,38 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
             <Input
               id="edit-account-health-interval"
               type="number"
-              min={30}
+              min={1}
               max={86400}
-              step={30}
+              step={1}
               value={healthInterval}
               onChange={(event) => setHealthInterval(event.target.value)}
-              placeholder={`留空继承全局（${config?.health_interval_seconds ?? 300} 秒）`}
+              placeholder={`留空继承全局（${config?.health_interval_seconds ?? 30} 秒）`}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-account-health-failures">连续失败停用</Label>
+            <Input
+              id="edit-account-health-failures"
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={healthFailureThreshold}
+              onChange={(event) => setHealthFailureThreshold(event.target.value)}
+              placeholder={`继承全局（${config?.health_failure_threshold ?? 10} 次）`}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-account-health-recovery">连续成功恢复</Label>
+            <Input
+              id="edit-account-health-recovery"
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={healthRecoveryThreshold}
+              onChange={(event) => setHealthRecoveryThreshold(event.target.value)}
+              placeholder={`继承全局（${config?.health_recovery_threshold ?? 3} 次）`}
             />
           </div>
           <div className="flex items-center justify-between gap-4 border-t pt-4 sm:col-span-2">

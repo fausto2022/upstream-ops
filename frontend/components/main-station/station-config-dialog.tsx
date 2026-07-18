@@ -47,7 +47,9 @@ export function StationConfigDialog({
   const [adminAPIKey, setAdminAPIKey] = useState("")
   const [enabled, setEnabled] = useState(true)
   const [healthModels, setHealthModels] = useState<Record<string, string>>({})
-  const [healthIntervalSeconds, setHealthIntervalSeconds] = useState(300)
+  const [healthIntervalSeconds, setHealthIntervalSeconds] = useState(30)
+  const [healthFailureThreshold, setHealthFailureThreshold] = useState(10)
+  const [healthRecoveryThreshold, setHealthRecoveryThreshold] = useState(3)
   const [modelCatalogs, setModelCatalogs] = useState<MainStationHealthModelCatalog[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [busy, setBusy] = useState<"test" | "save" | null>(null)
@@ -60,7 +62,9 @@ export function StationConfigDialog({
     setAdminAPIKey("")
     setEnabled(config?.enabled ?? true)
     setHealthModels(config?.health_models ?? {})
-    setHealthIntervalSeconds(config?.health_interval_seconds ?? 300)
+    setHealthIntervalSeconds(config?.health_interval_seconds ?? 30)
+    setHealthFailureThreshold(config?.health_failure_threshold ?? 10)
+    setHealthRecoveryThreshold(config?.health_recovery_threshold ?? 3)
     setModelCatalogs([])
     if (config?.configured) void loadHealthModels()
     if (!config?.configured && config?.migration?.status === "requires_confirmation") {
@@ -133,8 +137,12 @@ export function StationConfigDialog({
       toast.error("首次配置必须填写 Admin API Key")
       return
     }
-    if (healthIntervalSeconds < 30 || healthIntervalSeconds > 86400 || healthIntervalSeconds % 30 !== 0) {
-      toast.error("全局探活间隔必须是 30 到 86400 秒之间的 30 秒整数倍")
+    if (healthIntervalSeconds < 30 || healthIntervalSeconds > 86400) {
+      toast.error("全局探活间隔必须在 30 到 86400 秒之间")
+      return
+    }
+    if (healthFailureThreshold < 1 || healthFailureThreshold > 100 || healthRecoveryThreshold < 1 || healthRecoveryThreshold > 100) {
+      toast.error("失败和恢复次数必须在 1 到 100 之间")
       return
     }
     setBusy("save")
@@ -149,6 +157,8 @@ export function StationConfigDialog({
           enabled,
           health_models: healthModels,
           health_interval_seconds: healthIntervalSeconds,
+          health_failure_threshold: healthFailureThreshold,
+          health_recovery_threshold: healthRecoveryThreshold,
         }),
       })
       onSaved(saved)
@@ -263,19 +273,45 @@ export function StationConfigDialog({
                   )
                 })}
               </div>
-              <div className="space-y-2 border-t pt-3">
-                <Label htmlFor="main-station-health-interval">全局探活间隔（秒）</Label>
-                <Input
-                  id="main-station-health-interval"
-                  type="number"
-                  min={30}
-                  max={86400}
-                  step={30}
-                  value={healthIntervalSeconds}
-                  onChange={(event) => setHealthIntervalSeconds(Number(event.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">账号未单独设置时使用此间隔，最短 30 秒。</p>
+              <div className="grid gap-3 border-t pt-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="main-station-health-interval">探活间隔（秒）</Label>
+                  <Input
+                    id="main-station-health-interval"
+                    type="number"
+                    min={30}
+                    max={86400}
+                    step={1}
+                    value={healthIntervalSeconds}
+                    onChange={(event) => setHealthIntervalSeconds(Number(event.target.value))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="main-station-health-failures">连续失败停用</Label>
+                  <Input
+                    id="main-station-health-failures"
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={healthFailureThreshold}
+                    onChange={(event) => setHealthFailureThreshold(Number(event.target.value))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="main-station-health-recovery">连续成功恢复</Label>
+                  <Input
+                    id="main-station-health-recovery"
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={healthRecoveryThreshold}
+                    onChange={(event) => setHealthRecoveryThreshold(Number(event.target.value))}
+                  />
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground">账号未单独设置时继承以上策略；达到失败次数后停用，恢复达标后解除健康停用。</p>
             </div>
           ) : null}
           <div className="flex items-center justify-between gap-4 border-t pt-4">

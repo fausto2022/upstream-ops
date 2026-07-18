@@ -86,15 +86,25 @@ func TestHealthChecksUseControlledOutputLimitsAndClassifyFailures(t *testing.T) 
 	}
 
 	responseMode = "rate_limit"
+	if err := db.Model(member).Update("health_failure_threshold", 2).Error; err != nil {
+		t.Fatalf("set rate limit failure threshold: %v", err)
+	}
 	rateLimitResult, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L1", Force: true})
 	if err != nil {
 		t.Fatalf("L1 rate limit: %v", err)
 	}
-	if rateLimitResult.Check.ErrorClass != "rate_limited" || rateLimitResult.Member.CooldownUntil == nil {
+	if rateLimitResult.Check.ErrorClass != "rate_limited" || rateLimitResult.Member.CooldownUntil != nil {
 		t.Fatalf("rate limit result = %#v member=%#v", rateLimitResult.Check, rateLimitResult.Member)
 	}
-	if rateLimitResult.Member.ConsecutiveHealthFailure != 0 || rateLimitResult.Member.Status != "degraded" {
+	if rateLimitResult.Member.ConsecutiveHealthFailure != 1 || rateLimitResult.Member.Status != "degraded" {
 		t.Fatalf("rate limit member = %#v", rateLimitResult.Member)
+	}
+	secondRateLimit, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L1", Force: true})
+	if err != nil {
+		t.Fatalf("second L1 rate limit: %v", err)
+	}
+	if secondRateLimit.Member.ConsecutiveHealthFailure != 2 || secondRateLimit.Member.Status != "quarantined" {
+		t.Fatalf("second rate limit member = %#v", secondRateLimit.Member)
 	}
 
 	l2, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L2", Force: true})
@@ -263,7 +273,7 @@ func TestHealthBudgetStopsNonEssentialProbe(t *testing.T) {
 	}
 }
 
-func TestImmediateCredentialFailureQuarantinesInObservationMode(t *testing.T) {
+func TestCredentialFailureUsesConfiguredThreshold(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]any{"message": "invalid token"})
@@ -272,12 +282,23 @@ func TestImmediateCredentialFailureQuarantinesInObservationMode(t *testing.T) {
 
 	service, db, admin, _ := newTestService(t)
 	member := createHealthMember(t, service, db, admin, server.URL, "")
-	result, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true})
-	if err != nil {
-		t.Fatalf("check: %v", err)
+	failureThreshold := 2
+	if _, err := service.UpdateConfig(context.Background(), ConfigInput{HealthFailureThreshold: &failureThreshold}); err != nil {
+		t.Fatalf("set failure threshold: %v", err)
 	}
-	if result.Check.ErrorClass != "auth_invalid" || result.Member.LastHealthStatus != "unhealthy" || result.Member.Status != "quarantined" {
-		t.Fatalf("result = %#v member=%#v", result.Check, result.Member)
+	first, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true})
+	if err != nil {
+		t.Fatalf("first check: %v", err)
+	}
+	if first.Check.ErrorClass != "auth_invalid" || first.Member.LastHealthStatus != "degraded" || first.Member.ConsecutiveHealthFailure != 1 {
+		t.Fatalf("first result = %#v member=%#v", first.Check, first.Member)
+	}
+	second, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true})
+	if err != nil {
+		t.Fatalf("second check: %v", err)
+	}
+	if second.Member.LastHealthStatus != "unhealthy" || second.Member.Status != "quarantined" || second.Member.ConsecutiveHealthFailure != 2 {
+		t.Fatalf("second result = %#v member=%#v", second.Check, second.Member)
 	}
 }
 
@@ -296,6 +317,7 @@ func TestPreferredMemberAutomaticallyPausesAndRecovers(t *testing.T) {
 	service, db, admin, _ := newTestService(t)
 	member := createHealthMember(t, service, db, admin, server.URL, "")
 	member.Preferred = true
+	member.HealthFailureThreshold = 1
 	if err := db.Save(member).Error; err != nil {
 		t.Fatalf("mark preferred: %v", err)
 	}
@@ -442,10 +464,18 @@ func TestHealthRecoveryClearsOnlyHealthLockAfterThreshold(t *testing.T) {
 
 	service, db, admin, _ := newTestService(t)
 	member := createHealthMember(t, service, db, admin, server.URL, "")
+	config, err := service.store.GetConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	config.HealthFailureThreshold = 2
+	if err := service.store.SaveConfig(config); err != nil {
+		t.Fatalf("set health failure threshold: %v", err)
+	}
 	if _, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true}); err != nil {
 		t.Fatalf("observation failure: %v", err)
 	}
-	config, err := service.store.GetConfig()
+	config, err = service.store.GetConfig()
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}

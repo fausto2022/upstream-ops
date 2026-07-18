@@ -220,6 +220,8 @@ func (s *Service) accountDTO(item storage.MainStationAccountSnapshot) AccountDTO
 			HealthEnabled:            member.HealthEnabled,
 			HealthModel:              member.HealthModel,
 			HealthIntervalSeconds:    member.HealthIntervalSeconds,
+			HealthFailureThreshold:   member.HealthFailureThreshold,
+			HealthRecoveryThreshold:  member.HealthRecoveryThreshold,
 			Recent20SuccessRate:      recent20SuccessRate,
 			LastHealthStatus:         member.LastHealthStatus,
 			LastHealthAt:             member.LastHealthAt,

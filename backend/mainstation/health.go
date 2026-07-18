@@ -87,9 +87,13 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 	if member.BindingStatus == "orphaned" || member.BindingStatus == "invalid" {
 		return nil, errors.New("member binding is invalid")
 	}
-	model := effectiveHealthModel(pool.Platform, member.HealthModel, s.configuredHealthModels())
-	healthInterval := effectiveHealthInterval(member.HealthIntervalSeconds, s.configuredHealthIntervalSeconds())
+	settings := s.configuredHealthSettings()
+	model := effectiveHealthModel(pool.Platform, member.HealthModel, settings.Models)
+	healthInterval := effectiveHealthInterval(member.HealthIntervalSeconds, settings.IntervalSeconds)
 	policy := parseHealthPolicy(pool.HealthPolicyJSON)
+	policy.TransientFailureThreshold = effectiveHealthThreshold(member.HealthFailureThreshold, settings.FailureThreshold, defaultHealthFailureThreshold)
+	policy.EmptyFailureThreshold = policy.TransientFailureThreshold
+	policy.RecoverySuccessThreshold = effectiveHealthThreshold(member.HealthRecoveryThreshold, settings.RecoveryThreshold, defaultHealthRecoveryThreshold)
 	release, err := s.acquireHealthSlot(ctx, member.ID, member.SourceChannelID, level)
 	if err != nil {
 		return nil, err
@@ -163,7 +167,7 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 		}
 		_ = s.store.SaveConfig(config)
 	}
-	automationAction, automationErr := s.applyHealthAutomation(ctx, pool, member, &check, newHealth)
+	automationAction, automationErr := s.applyHealthAutomation(ctx, pool, member, &check, oldHealth, newHealth)
 	if automationAction != "" {
 		if check.TriggeredAction != "" {
 			check.TriggeredAction += ","
@@ -189,7 +193,8 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 			s.log.Warn("reconcile main station scheduling rank", "err", rankingErr, "pool_id", pool.ID)
 		}
 	}
-	if newHealth == "unhealthy" || (newHealth == "healthy" && (oldHealth == "unhealthy" || oldHealth == "quarantined" || oldHealth == "degraded")) {
+	if (newHealth == "unhealthy" && oldHealth != "unhealthy" && oldHealth != "quarantined") ||
+		(newHealth == "healthy" && (oldHealth == "unhealthy" || oldHealth == "quarantined" || oldHealth == "degraded")) {
 		s.notifyHealthTransition(ctx, pool, updated, &check, oldHealth, newHealth)
 	}
 	_, _ = s.EvaluatePoolCapacity(ctx, pool.ID)
@@ -204,7 +209,7 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 	return &HealthCheckResult{Check: check, Member: *updated, Stats: stats, Budget: budget}, nil
 }
 
-func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainAccountPool, member *storage.MainAccountPoolMember, check *storage.MainAccountHealthCheck, newHealth string) (string, error) {
+func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainAccountPool, member *storage.MainAccountPoolMember, check *storage.MainAccountHealthCheck, oldHealth, newHealth string) (string, error) {
 	if member.RemoteAccountID == nil {
 		return "", nil
 	}
@@ -212,7 +217,8 @@ func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainA
 	if err != nil {
 		return "", err
 	}
-	if newHealth == "unhealthy" && (member.Preferred || (config.AutoHealthProtection && config.HealthObservedAt != nil)) {
+	if newHealth == "unhealthy" && oldHealth != "unhealthy" && oldHealth != "quarantined" &&
+		(member.Preferred || (config.AutoHealthProtection && config.HealthObservedAt != nil)) {
 		_, err := s.ActivateGuardLock(ctx, *member.RemoteAccountID, "health", "member health checks reached quarantine threshold", map[string]any{
 			"pool_id": pool.ID, "member_id": member.ID, "health_check_id": check.ID,
 			"level": check.Level, "error_class": check.ErrorClass,
@@ -222,7 +228,7 @@ func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainA
 		}
 		return "health_lock_applied", nil
 	}
-	if newHealth == "healthy" && (member.Preferred || config.AutoRecovery) {
+	if newHealth == "healthy" && (oldHealth == "unhealthy" || oldHealth == "quarantined" || oldHealth == "degraded") {
 		_, err := s.ClearGuardLock(ctx, *member.RemoteAccountID, "health", "health")
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", nil
@@ -591,23 +597,17 @@ func applyHealthOutcome(member *storage.MainAccountPoolMember, check *storage.Ma
 		return map[string]any{}, "", oldHealth, oldHealth
 	default:
 		successes = 0
-		if check.ErrorClass == "rate_limited" {
-			until := now.Add(15 * time.Minute)
-			cooldown = &until
-			newHealth = "degraded"
-			newMemberStatus = "degraded"
-			break
-		}
 		failures++
 		threshold := policy.TransientFailureThreshold
 		if check.ErrorClass == "empty_response" {
 			threshold = policy.EmptyFailureThreshold
 		}
-		immediate := check.ErrorClass == "auth_invalid" || check.ErrorClass == "permission_denied" || check.ErrorClass == "balance_exhausted"
-		if immediate || failures >= threshold {
+		if failures >= threshold {
 			newHealth = "unhealthy"
 			newMemberStatus = "quarantined"
-			action = "health_quarantined"
+			if oldHealth != "unhealthy" && oldHealth != "quarantined" {
+				action = "health_quarantined"
+			}
 		} else {
 			newHealth = "degraded"
 			newMemberStatus = "degraded"
@@ -763,6 +763,10 @@ func healthBudgetExceeded(level string, budget HealthBudget) bool {
 }
 
 func (s *Service) RunDueHealthChecks(ctx context.Context) {
+	if !s.healthScheduleMu.TryLock() {
+		return
+	}
+	defer s.healthScheduleMu.Unlock()
 	members, err := s.store.ListAllMembers()
 	if err != nil {
 		if s.log != nil {
@@ -777,8 +781,7 @@ func (s *Service) RunDueHealthChecks(ctx context.Context) {
 	}
 	tasks := make([]task, 0, healthSchedulerBatchLimit)
 	poolCache := make(map[uint]*storage.MainAccountPool)
-	globalModels := s.configuredHealthModels()
-	globalIntervalSeconds := s.configuredHealthIntervalSeconds()
+	settings := s.configuredHealthSettings()
 	now := s.now()
 	sort.SliceStable(members, func(i, j int) bool {
 		return memberHealthOrderTime(members[i]).Before(memberHealthOrderTime(members[j]))
@@ -798,12 +801,12 @@ func (s *Service) RunDueHealthChecks(ctx context.Context) {
 			}
 			poolCache[member.PoolID] = pool
 		}
-		model := effectiveHealthModel(pool.Platform, member.HealthModel, globalModels)
+		model := effectiveHealthModel(pool.Platform, member.HealthModel, settings.Models)
 		level := "L0"
 		if model != "" {
 			level = "L1"
 		}
-		interval := effectiveHealthInterval(member.HealthIntervalSeconds, globalIntervalSeconds)
+		interval := effectiveHealthInterval(member.HealthIntervalSeconds, settings.IntervalSeconds)
 		if s.healthLevelDue(&member, level, now, interval) {
 			tasks = append(tasks, task{poolID: member.PoolID, memberID: member.ID, level: level})
 		}

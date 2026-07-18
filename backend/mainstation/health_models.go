@@ -96,11 +96,7 @@ func effectiveHealthModel(platform, memberModel string, globalModels map[string]
 }
 
 func (s *Service) configuredHealthModels() map[string]string {
-	config, err := s.store.GetConfig()
-	if err != nil {
-		return map[string]string{}
-	}
-	return decodeHealthModels(config.HealthModelsJSON)
+	return s.configuredHealthSettings().Models
 }
 
 func (s *Service) ListHealthModelCatalogs(ctx context.Context) ([]HealthModelCatalog, error) {

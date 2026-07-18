@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,47 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+func TestMainStationHealthStrategyMigrationUpdatesPreviousDefault(t *testing.T) {
+	db, err := Open(DBConfig{
+		Driver:       DBDriverSQLite,
+		Path:         filepath.Join(t.TempDir(), "health-strategy.db"),
+		MaxOpenConns: 1,
+		MaxIdleConns: 1,
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql database: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.Exec(`CREATE TABLE main_station_configs (
+		id integer primary key,
+		target_id integer not null,
+		enabled numeric not null default 1,
+		health_models_json text not null default '{}',
+		health_interval_seconds integer not null default 300,
+		created_at datetime,
+		updated_at datetime
+	)`).Error; err != nil {
+		t.Fatalf("create previous config schema: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO main_station_configs (id, target_id, enabled, health_interval_seconds) VALUES (1, 1, 1, 300)`).Error; err != nil {
+		t.Fatalf("insert previous config: %v", err)
+	}
+	if err := AutoMigrate(db); err != nil {
+		t.Fatalf("migrate health strategy: %v", err)
+	}
+	var config MainStationConfig
+	if err := db.First(&config, MainStationSingletonID).Error; err != nil {
+		t.Fatalf("load migrated config: %v", err)
+	}
+	if config.HealthIntervalSeconds != defaultMainStationHealthIntervalSeconds || config.HealthFailureThreshold != 10 || config.HealthRecoveryThreshold != 3 {
+		t.Fatalf("migrated health strategy = %#v", config)
+	}
+}
 
 func TestEmptyDatabaseCreatesMainStationSchemaWithoutConfiguration(t *testing.T) {
 	db := openTestDB(t)

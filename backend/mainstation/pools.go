@@ -378,6 +378,16 @@ func (s *Service) CreateMember(ctx context.Context, poolID uint, in MemberInput)
 			return nil, err
 		}
 	}
+	if in.HealthFailureThreshold != nil {
+		if err := validateMemberHealthThreshold("member health failure threshold", *in.HealthFailureThreshold); err != nil {
+			return nil, err
+		}
+	}
+	if in.HealthRecoveryThreshold != nil {
+		if err := validateMemberHealthThreshold("member health recovery threshold", *in.HealthRecoveryThreshold); err != nil {
+			return nil, err
+		}
+	}
 	in.Priority = normalizeSchedulingPriority(in.Priority)
 	in.Weight = automaticLoadFactor(in.Concurrency)
 	mode := strings.ToLower(strings.TrimSpace(in.OwnershipMode))
@@ -432,6 +442,18 @@ func (s *Service) UpdateMember(ctx context.Context, poolID, memberID uint, in Me
 			return nil, err
 		}
 		member.HealthIntervalSeconds = *in.HealthIntervalSeconds
+	}
+	if in.HealthFailureThreshold != nil {
+		if err := validateMemberHealthThreshold("member health failure threshold", *in.HealthFailureThreshold); err != nil {
+			return nil, err
+		}
+		member.HealthFailureThreshold = *in.HealthFailureThreshold
+	}
+	if in.HealthRecoveryThreshold != nil {
+		if err := validateMemberHealthThreshold("member health recovery threshold", *in.HealthRecoveryThreshold); err != nil {
+			return nil, err
+		}
+		member.HealthRecoveryThreshold = *in.HealthRecoveryThreshold
 	}
 	if in.ProxyID != nil {
 		member.ProxyID = in.ProxyID
@@ -862,6 +884,14 @@ func memberFromInput(poolID uint, in MemberInput) *storage.MainAccountPoolMember
 	if in.HealthIntervalSeconds != nil {
 		healthIntervalSeconds = *in.HealthIntervalSeconds
 	}
+	healthFailureThreshold := 0
+	if in.HealthFailureThreshold != nil {
+		healthFailureThreshold = *in.HealthFailureThreshold
+	}
+	healthRecoveryThreshold := 0
+	if in.HealthRecoveryThreshold != nil {
+		healthRecoveryThreshold = *in.HealthRecoveryThreshold
+	}
 	costAdjustment := in.CostAdjustment
 	if costAdjustment == 0 {
 		costAdjustment = 1
@@ -872,28 +902,30 @@ func memberFromInput(poolID uint, in MemberInput) *storage.MainAccountPoolMember
 		manualCost = &value
 	}
 	return &storage.MainAccountPoolMember{
-		PoolID:                 poolID,
-		AccountName:            strings.TrimSpace(in.AccountName),
-		SourceChannelID:        in.SourceChannelID,
-		SourceGroupID:          in.SourceGroupID,
-		SourceGroupName:        strings.TrimSpace(in.SourceGroupName),
-		SourceAPIKeyID:         in.SourceAPIKeyID,
-		RemoteAccountID:        in.RemoteAccountID,
-		Enabled:                enabled,
-		Preferred:              preferred,
-		ProxyID:                in.ProxyID,
-		Weight:                 automaticLoadFactor(in.Concurrency),
-		Priority:               normalizeSchedulingPriority(in.Priority),
-		Concurrency:            in.Concurrency,
-		RateConvertMode:        strings.TrimSpace(in.RateConvertMode),
-		RateConvertValueMicros: scaleFloat(in.RateConvertValue),
-		CostAdjustmentMicros:   scaleFloat(costAdjustment),
-		ManualCostMicros:       manualCost,
-		HealthEnabled:          healthEnabled,
-		HealthModel:            strings.TrimSpace(in.HealthModel),
-		HealthIntervalSeconds:  healthIntervalSeconds,
-		HealthAPIMode:          strings.TrimSpace(in.HealthAPIMode),
-		LastHealthStatus:       "unknown",
+		PoolID:                  poolID,
+		AccountName:             strings.TrimSpace(in.AccountName),
+		SourceChannelID:         in.SourceChannelID,
+		SourceGroupID:           in.SourceGroupID,
+		SourceGroupName:         strings.TrimSpace(in.SourceGroupName),
+		SourceAPIKeyID:          in.SourceAPIKeyID,
+		RemoteAccountID:         in.RemoteAccountID,
+		Enabled:                 enabled,
+		Preferred:               preferred,
+		ProxyID:                 in.ProxyID,
+		Weight:                  automaticLoadFactor(in.Concurrency),
+		Priority:                normalizeSchedulingPriority(in.Priority),
+		Concurrency:             in.Concurrency,
+		RateConvertMode:         strings.TrimSpace(in.RateConvertMode),
+		RateConvertValueMicros:  scaleFloat(in.RateConvertValue),
+		CostAdjustmentMicros:    scaleFloat(costAdjustment),
+		ManualCostMicros:        manualCost,
+		HealthEnabled:           healthEnabled,
+		HealthModel:             strings.TrimSpace(in.HealthModel),
+		HealthIntervalSeconds:   healthIntervalSeconds,
+		HealthFailureThreshold:  healthFailureThreshold,
+		HealthRecoveryThreshold: healthRecoveryThreshold,
+		HealthAPIMode:           strings.TrimSpace(in.HealthAPIMode),
+		LastHealthStatus:        "unknown",
 	}
 }
 

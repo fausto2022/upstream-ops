@@ -115,6 +115,8 @@ func Open(cfg DBConfig) (*gorm.DB, error) {
 
 // AutoMigrate 启动时自动同步表结构。
 func AutoMigrate(db *gorm.DB) error {
+	upgradeHealthDefaults := db.Migrator().HasTable(&MainStationConfig{}) &&
+		!db.Migrator().HasColumn(&MainStationConfig{}, "health_failure_threshold")
 	if err := dropDeletedAtColumns(db); err != nil {
 		return err
 	}
@@ -150,6 +152,13 @@ func AutoMigrate(db *gorm.DB) error {
 		&MainStationNotificationCooldown{},
 	); err != nil {
 		return err
+	}
+	if upgradeHealthDefaults {
+		if err := db.Model(&MainStationConfig{}).
+			Where("health_interval_seconds = ?", 300).
+			Update("health_interval_seconds", defaultMainStationHealthIntervalSeconds).Error; err != nil {
+			return fmt.Errorf("migrate main station health interval default: %w", err)
+		}
 	}
 	return migrateLegacyMainStationData(db)
 }

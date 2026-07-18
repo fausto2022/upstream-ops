@@ -91,7 +91,7 @@ func (s *Scheduler) Start() error {
 		}
 	}
 	if s.mainStation != nil {
-		if _, err := s.cron.AddFunc("@every 30s", s.runMainStationHealth); err != nil {
+		if _, err := s.cron.AddFunc("@every 1s", s.runMainStationHealth); err != nil {
 			return err
 		}
 	}

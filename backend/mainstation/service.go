@@ -22,10 +22,21 @@ import (
 )
 
 const (
-	defaultHealthIntervalSeconds = 300
-	minimumHealthIntervalSeconds = 30
-	maximumHealthIntervalSeconds = 86400
+	defaultHealthIntervalSeconds       = 30
+	minimumGlobalHealthIntervalSeconds = 30
+	minimumMemberHealthIntervalSeconds = 1
+	maximumHealthIntervalSeconds       = 86400
+	defaultHealthFailureThreshold      = 10
+	defaultHealthRecoveryThreshold     = 3
+	maximumHealthThreshold             = 100
 )
+
+type globalHealthSettings struct {
+	Models            map[string]string
+	IntervalSeconds   int
+	FailureThreshold  int
+	RecoveryThreshold int
+}
 
 type channelService interface {
 	RevealAPIKey(ctx context.Context, channelID uint, keyID int64) (string, error)
@@ -53,27 +64,28 @@ type adminClient interface {
 }
 
 type Service struct {
-	store           *storage.MainStationStore
-	targets         *storage.UpstreamSyncTargets
-	targetGroups    *storage.UpstreamSyncTargetGroups
-	channels        *storage.Channels
-	rates           *storage.Rates
-	managedAccounts *storage.UpstreamSyncManagedAccounts
-	cipher          *crypto.Cipher
-	channelSvc      channelService
-	log             *slog.Logger
-	dispatcher      *notify.Dispatcher
-	adminFactory    func() adminClient
-	healthMu        sync.Mutex
-	healthRunning   map[string]struct{}
-	healthGlobal    chan struct{}
-	healthChannels  map[uint]chan struct{}
-	probeConfigMu   sync.RWMutex
-	proxyConfig     config.ProxyConfig
-	probeTimeout    time.Duration
-	probeUserAgent  string
-	now             func() time.Time
-	scheduleLocks   sync.Map
+	store            *storage.MainStationStore
+	targets          *storage.UpstreamSyncTargets
+	targetGroups     *storage.UpstreamSyncTargetGroups
+	channels         *storage.Channels
+	rates            *storage.Rates
+	managedAccounts  *storage.UpstreamSyncManagedAccounts
+	cipher           *crypto.Cipher
+	channelSvc       channelService
+	log              *slog.Logger
+	dispatcher       *notify.Dispatcher
+	adminFactory     func() adminClient
+	healthMu         sync.Mutex
+	healthRunning    map[string]struct{}
+	healthGlobal     chan struct{}
+	healthChannels   map[uint]chan struct{}
+	healthScheduleMu sync.Mutex
+	probeConfigMu    sync.RWMutex
+	proxyConfig      config.ProxyConfig
+	probeTimeout     time.Duration
+	probeUserAgent   string
+	now              func() time.Time
+	scheduleLocks    sync.Map
 }
 
 func (s *Service) SetDispatcher(dispatcher *notify.Dispatcher) {
@@ -160,6 +172,8 @@ func (s *Service) GetConfig() (*ConfigDTO, error) {
 	dto.AutoRecovery = config.AutoRecovery
 	dto.HealthModels = decodeHealthModels(config.HealthModelsJSON)
 	dto.HealthIntervalSeconds = normalizedGlobalHealthInterval(config.HealthIntervalSeconds)
+	dto.HealthFailureThreshold = normalizedHealthThreshold(config.HealthFailureThreshold, defaultHealthFailureThreshold)
+	dto.HealthRecoveryThreshold = normalizedHealthThreshold(config.HealthRecoveryThreshold, defaultHealthRecoveryThreshold)
 	dto.ObservationEvaluatedAt = config.ObservationEvaluatedAt
 	dto.HealthObservedAt = config.HealthObservedAt
 	dto.MarginObservedAt = config.MarginObservedAt
@@ -206,11 +220,27 @@ func (s *Service) CreateConfig(ctx context.Context, in ConfigInput) (*ConfigDTO,
 			return nil, err
 		}
 	}
+	healthFailureThreshold := defaultHealthFailureThreshold
+	if in.HealthFailureThreshold != nil {
+		healthFailureThreshold = *in.HealthFailureThreshold
+		if err := validateHealthThreshold("health failure threshold", healthFailureThreshold); err != nil {
+			return nil, err
+		}
+	}
+	healthRecoveryThreshold := defaultHealthRecoveryThreshold
+	if in.HealthRecoveryThreshold != nil {
+		healthRecoveryThreshold = *in.HealthRecoveryThreshold
+		if err := validateHealthThreshold("health recovery threshold", healthRecoveryThreshold); err != nil {
+			return nil, err
+		}
+	}
 	config := &storage.MainStationConfig{
-		ID:                    storage.MainStationSingletonID,
-		Enabled:               enabled,
-		HealthModelsJSON:      healthModelsJSON,
-		HealthIntervalSeconds: healthIntervalSeconds,
+		ID:                      storage.MainStationSingletonID,
+		Enabled:                 enabled,
+		HealthModelsJSON:        healthModelsJSON,
+		HealthIntervalSeconds:   healthIntervalSeconds,
+		HealthFailureThreshold:  healthFailureThreshold,
+		HealthRecoveryThreshold: healthRecoveryThreshold,
 	}
 	target := &storage.UpstreamSyncTarget{
 		Name:              name,
@@ -307,6 +337,18 @@ func (s *Service) UpdateConfig(ctx context.Context, in ConfigInput) (*ConfigDTO,
 			return nil, err
 		}
 		config.HealthIntervalSeconds = *in.HealthIntervalSeconds
+	}
+	if in.HealthFailureThreshold != nil {
+		if err := validateHealthThreshold("health failure threshold", *in.HealthFailureThreshold); err != nil {
+			return nil, err
+		}
+		config.HealthFailureThreshold = *in.HealthFailureThreshold
+	}
+	if in.HealthRecoveryThreshold != nil {
+		if err := validateHealthThreshold("health recovery threshold", *in.HealthRecoveryThreshold); err != nil {
+			return nil, err
+		}
+		config.HealthRecoveryThreshold = *in.HealthRecoveryThreshold
 	}
 	if err := s.store.UpdateConfigWithTarget(target, config); err != nil {
 		return nil, err
@@ -481,11 +523,8 @@ func redactSecretError(err error, secret string) error {
 func ptrTime(value time.Time) *time.Time { return &value }
 
 func validateGlobalHealthInterval(seconds int) error {
-	if seconds < minimumHealthIntervalSeconds || seconds > maximumHealthIntervalSeconds {
-		return fmt.Errorf("health interval must be between %d and %d seconds", minimumHealthIntervalSeconds, maximumHealthIntervalSeconds)
-	}
-	if seconds%minimumHealthIntervalSeconds != 0 {
-		return fmt.Errorf("health interval must be a multiple of %d seconds", minimumHealthIntervalSeconds)
+	if seconds < minimumGlobalHealthIntervalSeconds || seconds > maximumHealthIntervalSeconds {
+		return fmt.Errorf("health interval must be between %d and %d seconds", minimumGlobalHealthIntervalSeconds, maximumHealthIntervalSeconds)
 	}
 	return nil
 }
@@ -494,27 +533,66 @@ func validateMemberHealthInterval(seconds int) error {
 	if seconds == 0 {
 		return nil
 	}
-	return validateGlobalHealthInterval(seconds)
+	if seconds < minimumMemberHealthIntervalSeconds || seconds > maximumHealthIntervalSeconds {
+		return fmt.Errorf("member health interval must be between %d and %d seconds", minimumMemberHealthIntervalSeconds, maximumHealthIntervalSeconds)
+	}
+	return nil
 }
 
 func normalizedGlobalHealthInterval(seconds int) int {
-	if seconds < minimumHealthIntervalSeconds || seconds > maximumHealthIntervalSeconds || seconds%minimumHealthIntervalSeconds != 0 {
+	if seconds < minimumGlobalHealthIntervalSeconds || seconds > maximumHealthIntervalSeconds {
 		return defaultHealthIntervalSeconds
 	}
 	return seconds
 }
 
 func effectiveHealthInterval(memberSeconds, globalSeconds int) time.Duration {
-	if memberSeconds >= minimumHealthIntervalSeconds && memberSeconds <= maximumHealthIntervalSeconds && memberSeconds%minimumHealthIntervalSeconds == 0 {
+	if memberSeconds >= minimumMemberHealthIntervalSeconds && memberSeconds <= maximumHealthIntervalSeconds {
 		return time.Duration(memberSeconds) * time.Second
 	}
 	return time.Duration(normalizedGlobalHealthInterval(globalSeconds)) * time.Second
 }
 
-func (s *Service) configuredHealthIntervalSeconds() int {
+func validateMemberHealthThreshold(name string, value int) error {
+	if value == 0 {
+		return nil
+	}
+	return validateHealthThreshold(name, value)
+}
+
+func validateHealthThreshold(name string, value int) error {
+	if value < 1 || value > maximumHealthThreshold {
+		return fmt.Errorf("%s must be between 1 and %d", name, maximumHealthThreshold)
+	}
+	return nil
+}
+
+func normalizedHealthThreshold(value, fallback int) int {
+	if value < 1 || value > maximumHealthThreshold {
+		return fallback
+	}
+	return value
+}
+
+func effectiveHealthThreshold(memberValue, globalValue, fallback int) int {
+	if memberValue >= 1 && memberValue <= maximumHealthThreshold {
+		return memberValue
+	}
+	return normalizedHealthThreshold(globalValue, fallback)
+}
+
+func (s *Service) configuredHealthSettings() globalHealthSettings {
 	config, err := s.store.GetConfig()
 	if err != nil {
-		return defaultHealthIntervalSeconds
+		return globalHealthSettings{
+			Models: map[string]string{}, IntervalSeconds: defaultHealthIntervalSeconds,
+			FailureThreshold: defaultHealthFailureThreshold, RecoveryThreshold: defaultHealthRecoveryThreshold,
+		}
 	}
-	return normalizedGlobalHealthInterval(config.HealthIntervalSeconds)
+	return globalHealthSettings{
+		Models:            decodeHealthModels(config.HealthModelsJSON),
+		IntervalSeconds:   normalizedGlobalHealthInterval(config.HealthIntervalSeconds),
+		FailureThreshold:  normalizedHealthThreshold(config.HealthFailureThreshold, defaultHealthFailureThreshold),
+		RecoveryThreshold: normalizedHealthThreshold(config.HealthRecoveryThreshold, defaultHealthRecoveryThreshold),
+	}
 }
