@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/fausto2022/relaydeck/backend/notify"
 	"github.com/fausto2022/relaydeck/backend/storage"
@@ -207,7 +208,12 @@ func testNotify(c *gin.Context, d *Deps) {
 	}
 	msg := notify.Message{
 		Subject: "测试通知",
-		Body:    "这是一条来自 RelayDeck 的测试消息。",
+		Body: notify.MarkdownDetails(
+			"通知渠道测试成功。",
+			notify.Detail("渠道名称", ch.Name),
+			notify.Detail("渠道类型", ch.Type),
+			notify.Detail("发送时间", time.Now().Format("2006-01-02 15:04:05")),
+		) + notify.MarkdownNote("说明", "收到此消息表示 RelayDeck 已能正常调用该通知渠道。"),
 	}
 	if err := d.Dispatcher.Send(c.Request.Context(), ch, msg); err != nil {
 		c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})

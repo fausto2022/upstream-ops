@@ -268,11 +268,6 @@ export interface SystemAuthConfig {
   sessionTTLHours: number
 }
 
-export interface AppConfig {
-  title: string
-  notificationPrefix: string
-}
-
 export interface SystemSchedulerRetentionConfig {
   cron: string
   monitorLogsDays: number
@@ -316,7 +311,6 @@ export interface SystemUpstreamConfig {
 }
 
 export interface SystemConfig {
-  app: AppConfig
   auth: SystemAuthConfig
   scheduler: SystemSchedulerConfig
   notifications: SystemNotificationsConfig

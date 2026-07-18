@@ -556,20 +556,20 @@ func (s *Service) notifySyncGroupChanged(action string, item *storage.UpstreamSy
 	if displayName == "" {
 		displayName = item.Name
 	}
-	body := fmt.Sprintf(
-		"动作：%s\n同步分组：%s\n同步名称：%s\n目标上游：%s\n平台：%s\n目标分组数：%d\n同步账号数：%d\n时间：%s",
-		action,
-		displayName,
-		item.Name,
-		targetName,
-		item.Platform,
-		len(targetGroupIDs),
-		len(accounts),
-		time.Now().Format("2006-01-02 15:04:05"),
+	body := notify.MarkdownDetails(
+		"同步分组配置发生变化。",
+		notify.Detail("动作", action),
+		notify.Detail("显示名称", displayName),
+		notify.Detail("同步名称", item.Name),
+		notify.Detail("目标上游", targetName),
+		notify.Detail("平台", item.Platform),
+		notify.Detail("目标分组数", len(targetGroupIDs)),
+		notify.Detail("同步账号数", len(accounts)),
+		notify.Detail("操作时间", time.Now().Format("2006-01-02 15:04:05")),
 	)
 	if err := s.dispatcher.Dispatch(context.Background(), notify.Message{
 		Event:   storage.EventUpstreamSyncGroupChanged,
-		Subject: fmt.Sprintf("[同步分组变动] %s · %s", action, displayName),
+		Subject: fmt.Sprintf("同步分组%s · %s", action, displayName),
 		Body:    body,
 		Extra: map[string]any{
 			"sync_group_id": item.ID,
@@ -588,27 +588,32 @@ func (s *Service) notifySyncGroupApplyChanged(ctx context.Context, item *storage
 	if displayName == "" {
 		displayName = item.Name
 	}
-	details := make([]string, 0, 2)
+	changeItems := make([]string, 0, len(changes))
 	if len(changes) > 0 {
-		details = append(details, "变动账号：\n"+strings.Join(prefixLines(changes, "- "), "\n"))
+		for _, change := range changes {
+			changeItems = append(changeItems, notify.MarkdownCode(change))
+		}
 	}
+	failureItems := make([]string, 0, len(failures))
 	if len(failures) > 0 {
-		details = append(details, "失败账号：\n"+strings.Join(prefixLines(failures, "- "), "\n"))
+		for _, failure := range failures {
+			failureItems = append(failureItems, notify.MarkdownCode(failure))
+		}
 	}
-	body := fmt.Sprintf(
-		"动作：应用同步\n同步分组：%s\n同步名称：%s\n目标上游：%s\n应用账号数：%d\n变动账号数：%d\n失败账号数：%d\n时间：%s\n\n%s",
-		displayName,
-		item.Name,
-		target.Name,
-		applied,
-		len(changes),
-		len(failures),
-		time.Now().Format("2006-01-02 15:04:05"),
-		strings.Join(details, "\n\n"),
-	)
-	subject := fmt.Sprintf("[同步账号变动] %s · %d 项", displayName, len(changes))
+	body := notify.MarkdownDetails(
+		"同步任务已经执行，以下是本次应用结果。",
+		notify.Detail("同步分组", displayName),
+		notify.Detail("同步名称", item.Name),
+		notify.Detail("目标上游", target.Name),
+		notify.Detail("应用账号数", applied),
+		notify.Detail("变动账号数", len(changes)),
+		notify.Detail("失败账号数", len(failures)),
+		notify.Detail("执行时间", time.Now().Format("2006-01-02 15:04:05")),
+	) + notify.MarkdownSection("变动账号", changeItems) + notify.MarkdownSection("失败账号", failureItems)
+	subject := fmt.Sprintf("同步账号变动 · %s · %d 项", displayName, len(changes))
 	if len(failures) > 0 {
-		subject = fmt.Sprintf("[同步账号异常] %s · 失败 %d / 变动 %d", displayName, len(failures), len(changes))
+		subject = fmt.Sprintf("同步账号异常 · %s · 失败 %d / 变动 %d", displayName, len(failures), len(changes))
+		body += notify.MarkdownNote("处理建议", "请检查失败账号的绑定关系、目标站状态和写入权限。")
 	}
 	if err := s.dispatcher.Dispatch(ctx, notify.Message{
 		Event:   storage.EventUpstreamSyncGroupChanged,

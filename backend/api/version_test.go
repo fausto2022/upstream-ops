@@ -35,6 +35,9 @@ func TestVersionEndpointReportsUpdate(t *testing.T) {
 	withGitHubReleaseServer(t, http.StatusOK, `{"tag_name":"v999.0.0","html_url":"https://github.com/fausto2022/relaydeck/releases/tag/v999.0.0"}`)
 	resp := requestVersion(t)
 
+	if resp.Title != "RelayDeck" {
+		t.Fatalf("title = %q, want RelayDeck", resp.Title)
+	}
 	if !resp.UpdateAvailable {
 		t.Fatalf("update_available = false, want true")
 	}

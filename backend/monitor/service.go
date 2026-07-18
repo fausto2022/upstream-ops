@@ -141,11 +141,17 @@ func (s *Service) RefreshBalance(ctx context.Context, c *storage.Channel) error 
 		map[string]any{"today_cost": costRes.TodayCost, "total_cost": costRes.TotalCost})
 
 	if c.BalanceThreshold > 0 && res.Balance < c.BalanceThreshold {
-		body := fmt.Sprintf("当前余额: %.4f，阈值: %.4f", res.Balance, c.BalanceThreshold)
+		body := notify.MarkdownDetails(
+			"渠道余额已低于预警阈值。",
+			notify.Detail("渠道", c.Name),
+			notify.Detail("当前余额", fmt.Sprintf("%.4f", res.Balance)),
+			notify.Detail("预警阈值", fmt.Sprintf("%.4f", c.BalanceThreshold)),
+			notify.Detail("检测时间", sampledAt.Format("2006-01-02 15:04:05")),
+		) + notify.MarkdownNote("处理建议", "请及时检查上游余额并安排充值，避免渠道因余额不足中断服务。")
 		_ = s.dispatcher.Dispatch(ctx, notify.Message{
 			Event:     storage.EventBalanceLow,
 			ChannelID: c.ID,
-			Subject:   fmt.Sprintf("%s 余额低于阈值", c.Name),
+			Subject:   fmt.Sprintf("余额不足 · %s", c.Name),
 			Body:      body,
 		})
 	}
@@ -320,17 +326,29 @@ func (s *Service) dispatchSubscriptionWindowAlert(ctx context.Context, c *storag
 		if w.ResetsAt != nil && !w.ResetsAt.IsZero() {
 			reset = w.ResetsAt.Format("01-02 15:04")
 		}
-		lines = append(lines, fmt.Sprintf("· %s：已用 $%.4f / $%.4f，剩余 $%.4f（%.1f%%），重置 %s",
-			subscriptionGroupName(item), w.UsedUSD, w.LimitUSD, w.RemainingUSD, w.RemainingPercent, reset))
+		lines = append(lines, fmt.Sprintf("%s：已用 %s / %s，剩余 %s（%s），重置 %s",
+			notify.MarkdownCode(subscriptionGroupName(item)),
+			notify.MarkdownCode(fmt.Sprintf("$%.4f", w.UsedUSD)),
+			notify.MarkdownCode(fmt.Sprintf("$%.4f", w.LimitUSD)),
+			notify.MarkdownCode(fmt.Sprintf("$%.4f", w.RemainingUSD)),
+			notify.MarkdownCode(fmt.Sprintf("%.1f%%", w.RemainingPercent)),
+			notify.MarkdownCode(reset)))
 	}
 	if len(lines) == 0 {
 		return
 	}
-	body := fmt.Sprintf("渠道：%s\n维度：%s\n阈值：剩余 %.1f%%\n%s", c.Name, label, threshold, strings.Join(lines, "\n"))
+	body := notify.MarkdownDetails(
+		"订阅剩余额度已触发预警。",
+		notify.Detail("渠道", c.Name),
+		notify.Detail("统计周期", label),
+		notify.Detail("预警阈值", fmt.Sprintf("剩余 %.1f%%", threshold)),
+		notify.Detail("影响订阅数", len(lines)),
+	) + notify.MarkdownSection("额度明细", lines) +
+		notify.MarkdownNote("处理建议", "请检查订阅额度和重置时间，必要时提前补充额度或切换渠道。")
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event:     event,
 		ChannelID: c.ID,
-		Subject:   fmt.Sprintf("%s 订阅%s剩余额度不足", c.Name, label),
+		Subject:   fmt.Sprintf("订阅%s额度不足 · %s", label, c.Name),
 		Body:      body,
 	})
 }
@@ -349,17 +367,25 @@ func (s *Service) dispatchSubscriptionExpiryAlert(ctx context.Context, c *storag
 		if remaining > threshold {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("· %s：到期 %s，剩余 %s",
-			subscriptionGroupName(item), item.ExpiresAt.Format("2006-01-02 15:04"), formatDurationHours(remaining)))
+		lines = append(lines, fmt.Sprintf("%s：到期时间 %s，剩余 %s",
+			notify.MarkdownCode(subscriptionGroupName(item)),
+			notify.MarkdownCode(item.ExpiresAt.Format("2006-01-02 15:04:05")),
+			notify.MarkdownCode(formatDurationHours(remaining))))
 	}
 	if len(lines) == 0 {
 		return
 	}
-	body := fmt.Sprintf("渠道：%s\n类型：订阅即将到期\n阈值：剩余 %.0f 小时\n%s", c.Name, threshold.Hours(), strings.Join(lines, "\n"))
+	body := notify.MarkdownDetails(
+		"订阅有效期已进入预警窗口。",
+		notify.Detail("渠道", c.Name),
+		notify.Detail("预警阈值", fmt.Sprintf("剩余 %.0f 小时", threshold.Hours())),
+		notify.Detail("影响订阅数", len(lines)),
+	) + notify.MarkdownSection("到期明细", lines) +
+		notify.MarkdownNote("处理建议", "请及时续期，避免订阅到期后影响上游请求。")
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event:     storage.EventSubscriptionExpiring,
 		ChannelID: c.ID,
-		Subject:   fmt.Sprintf("%s 订阅即将到期", c.Name),
+		Subject:   fmt.Sprintf("订阅即将到期 · %s", c.Name),
 		Body:      body,
 	})
 }
@@ -407,8 +433,14 @@ func (s *Service) notifyError(ctx context.Context, c *storage.Channel, event sto
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event:     event,
 		ChannelID: c.ID,
-		Subject:   fmt.Sprintf("%s %s", c.Name, subject),
-		Body:      err.Error(),
+		Subject:   fmt.Sprintf("%s · %s", subject, c.Name),
+		Body: notify.MarkdownDetails(
+			"渠道监控任务执行失败。",
+			notify.Detail("渠道", c.Name),
+			notify.Detail("任务", subject),
+			notify.Detail("错误", err.Error()),
+			notify.Detail("发生时间", time.Now().Format("2006-01-02 15:04:05")),
+		) + notify.MarkdownNote("处理建议", "请检查渠道凭据、上游状态和网络连通性。"),
 	})
 }
 
@@ -480,29 +512,27 @@ func announcementSubject(c *storage.Channel, a storage.UpstreamAnnouncement) str
 	if len([]rune(title)) > 40 {
 		title = string([]rune(title)[:40])
 	}
-	return fmt.Sprintf("%s 公告 · %s", c.Name, title)
+	return fmt.Sprintf("上游公告 · %s · %s", c.Name, title)
 }
 
 func announcementBody(c *storage.Channel, a storage.UpstreamAnnouncement) string {
-	var b strings.Builder
-	if a.Content != "" {
-		b.WriteString(a.Content)
-	}
-	if a.Link != "" {
-		if b.Len() > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString("来源：")
-		b.WriteString(a.Link)
-	}
+	publishedAt := "—"
 	if a.PublishedAt != nil {
-		if b.Len() > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString("发布时间：")
-		b.WriteString(a.PublishedAt.Format("2006-01-02 15:04"))
+		publishedAt = a.PublishedAt.Format("2006-01-02 15:04:05")
 	}
-	return b.String()
+	body := notify.MarkdownDetails(
+		"收到上游发布的新公告。",
+		notify.Detail("渠道", c.Name),
+		notify.Detail("公告类型", a.Type),
+		notify.Detail("发布时间", publishedAt),
+	)
+	if content := strings.TrimSpace(a.Content); content != "" {
+		body += "\n\n#### 公告内容\n\n" + content
+	}
+	if link := strings.TrimSpace(a.Link); link != "" {
+		body += "\n\n[查看原公告](" + link + ")"
+	}
+	return body
 }
 
 func errString(err error) string {

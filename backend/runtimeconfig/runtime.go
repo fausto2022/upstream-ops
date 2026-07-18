@@ -143,7 +143,6 @@ func (m *Manager) ApplyFromFile() (*ApplyResult, error) {
 
 	if dispatcher != nil {
 		dispatcher.UpdatePolicy(notify.Policy{
-			NotificationPrefix:                       cfg.App.NotificationPrefix,
 			BatchRateChanges:                         cfg.Notifications.BatchRateChanges,
 			MinChangePct:                             cfg.Notifications.MinChangePct,
 			BalanceLowCooldown:                       time.Duration(cfg.Notifications.BalanceLowCooldownMinutes) * time.Minute,
@@ -182,14 +181,14 @@ func (m *Manager) ApplyFromFile() (*ApplyResult, error) {
 
 	if m.log != nil {
 		m.log.Info("runtime config applied",
-			"sections", []string{"app", "auth", "scheduler", "notifications", "retention", "proxy", "upstream"},
+			"sections", []string{"auth", "scheduler", "notifications", "retention", "proxy", "upstream"},
 			"config_path", path,
 		)
 	}
 
 	return &ApplyResult{
-		AppliedSections: []string{"app", "auth", "scheduler", "notifications", "retention", "proxy", "upstream"},
-		Message:         "app、auth、scheduler、notifications、retention、proxy、upstream 已立即生效",
+		AppliedSections: []string{"auth", "scheduler", "notifications", "retention", "proxy", "upstream"},
+		Message:         "auth、scheduler、notifications、retention、proxy、upstream 已立即生效",
 	}, nil
 }
 

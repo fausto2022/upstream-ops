@@ -3,7 +3,6 @@ package notify
 import (
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/fausto2022/relaydeck/backend/storage"
@@ -15,7 +14,6 @@ import (
 //   - BalanceLowCooldown：同渠道 balance_low 在窗口内不重复发送
 //   - SendMaxAttempts：单条消息最多发送尝试次数（含首发），<=1 表示不重试
 type Policy struct {
-	NotificationPrefix                       string
 	BatchRateChanges                         bool
 	MinChangePct                             float64
 	BalanceLowCooldown                       time.Duration
@@ -82,10 +80,14 @@ func BuildRateBatchMessage(channel *storage.Channel, event storage.NotificationE
 				Event:     storage.EventRateAdded,
 				ChannelID: channel.ID,
 				ModelName: c.GroupName,
-				Subject:   fmt.Sprintf("【分组新增提醒】%s · %s", channel.Name, c.GroupName),
-				Body: fmt.Sprintf(
-					"渠道：%s\n新增分组：%s\n倍率：%g\n发现时间：%s",
-					channel.Name, c.GroupName, c.NewRatio, now.Format("2006-01-02 15:04"),
+				Subject:   fmt.Sprintf("新增分组 · %s · %s", channel.Name, c.GroupName),
+				Body: MarkdownDetails(
+					"检测到新的上游分组。",
+					Detail("渠道", channel.Name),
+					Detail("分组", c.GroupName),
+					Detail("倍率", fmt.Sprintf("%g", c.NewRatio)),
+					Detail("补全倍率", fmt.Sprintf("%g", c.NewComp)),
+					Detail("发现时间", now.Format("2006-01-02 15:04:05")),
 				),
 			}
 		}
@@ -94,62 +96,77 @@ func BuildRateBatchMessage(channel *storage.Channel, event storage.NotificationE
 				Event:     storage.EventRateRemoved,
 				ChannelID: channel.ID,
 				ModelName: c.GroupName,
-				Subject:   fmt.Sprintf("【分组删除提醒】%s · %s", channel.Name, c.GroupName),
-				Body: fmt.Sprintf(
-					"渠道：%s\n删除分组：%s\n原倍率：%g\n发现时间：%s",
-					channel.Name, c.GroupName, c.OldRatio, now.Format("2006-01-02 15:04"),
+				Subject:   fmt.Sprintf("分组移除 · %s · %s", channel.Name, c.GroupName),
+				Body: MarkdownDetails(
+					"上游返回结果中已找不到该分组。",
+					Detail("渠道", channel.Name),
+					Detail("分组", c.GroupName),
+					Detail("原倍率", fmt.Sprintf("%g", c.OldRatio)),
+					Detail("原补全倍率", fmt.Sprintf("%g", c.OldComp)),
+					Detail("发现时间", now.Format("2006-01-02 15:04:05")),
 				),
 			}
 		}
+		direction := arrowFor(c.OldRatio, c.NewRatio)
 		return Message{
 			Event:     storage.EventRateChanged,
 			ChannelID: channel.ID,
 			ModelName: c.GroupName,
-			Subject:   fmt.Sprintf("【倍率变化提醒】%s · %s", channel.Name, c.GroupName),
-			Body: fmt.Sprintf(
-				"渠道：%s\n分组倍率：%s 由 %g %s至 %g\n变化时间：%s",
-				channel.Name, c.GroupName, c.OldRatio, arrowFor(c.OldRatio, c.NewRatio), c.NewRatio,
-				now.Format("2006-01-02 15:04"),
+			Subject:   fmt.Sprintf("倍率%s · %s · %s", direction, channel.Name, c.GroupName),
+			Body: MarkdownDetails(
+				fmt.Sprintf("分组倍率发生%s。", direction),
+				Detail("渠道", channel.Name),
+				Detail("分组", c.GroupName),
+				Detail("倍率", fmt.Sprintf("%g -> %g", c.OldRatio, c.NewRatio)),
+				Detail("补全倍率", fmt.Sprintf("%g -> %g", c.OldComp, c.NewComp)),
+				Detail("变化时间", now.Format("2006-01-02 15:04:05")),
 			),
 		}
 	}
 
-	// 合并多条：subject 简短，body 列出每条。
-	var b strings.Builder
+	items := make([]string, 0, len(changes))
 	switch event {
 	case storage.EventRateAdded:
-		fmt.Fprintf(&b, "渠道：%s\n共 %d 个新增分组：\n", channel.Name, len(changes))
 		for _, c := range changes {
-			fmt.Fprintf(&b, "  · %s：倍率 %g\n", c.GroupName, c.NewRatio)
+			items = append(items, fmt.Sprintf("%s：倍率 %s，补全倍率 %s",
+				MarkdownCode(c.GroupName), MarkdownCode(fmt.Sprintf("%g", c.NewRatio)), MarkdownCode(fmt.Sprintf("%g", c.NewComp))))
 		}
-		fmt.Fprintf(&b, "时间：%s", now.Format("2006-01-02 15:04"))
 		return Message{
 			Event:     storage.EventRateAdded,
 			ChannelID: channel.ID,
 			ModelName: "",
-			Subject:   fmt.Sprintf("【分组新增提醒】%s · %d 个分组", channel.Name, len(changes)),
-			Body:      b.String(),
+			Subject:   fmt.Sprintf("新增分组 · %s · %d 项", channel.Name, len(changes)),
+			Body: MarkdownDetails(
+				"检测到多个新的上游分组。",
+				Detail("渠道", channel.Name),
+				Detail("新增数量", len(changes)),
+				Detail("发现时间", now.Format("2006-01-02 15:04:05")),
+			) + MarkdownSection("新增明细", items),
 		}
 	case storage.EventRateRemoved:
-		fmt.Fprintf(&b, "渠道：%s\n共 %d 个删除分组：\n", channel.Name, len(changes))
 		for _, c := range changes {
-			fmt.Fprintf(&b, "  · %s：原倍率 %g\n", c.GroupName, c.OldRatio)
+			items = append(items, fmt.Sprintf("%s：原倍率 %s，原补全倍率 %s",
+				MarkdownCode(c.GroupName), MarkdownCode(fmt.Sprintf("%g", c.OldRatio)), MarkdownCode(fmt.Sprintf("%g", c.OldComp))))
 		}
-		fmt.Fprintf(&b, "时间：%s", now.Format("2006-01-02 15:04"))
 		return Message{
 			Event:     storage.EventRateRemoved,
 			ChannelID: channel.ID,
 			ModelName: "",
-			Subject:   fmt.Sprintf("【分组删除提醒】%s · %d 个分组", channel.Name, len(changes)),
-			Body:      b.String(),
+			Subject:   fmt.Sprintf("分组移除 · %s · %d 项", channel.Name, len(changes)),
+			Body: MarkdownDetails(
+				"上游返回结果中已找不到这些分组。",
+				Detail("渠道", channel.Name),
+				Detail("移除数量", len(changes)),
+				Detail("发现时间", now.Format("2006-01-02 15:04:05")),
+			) + MarkdownSection("移除明细", items),
 		}
 	default:
-		fmt.Fprintf(&b, "渠道：%s\n共 %d 个分组倍率变化：\n", channel.Name, len(changes))
 		for _, c := range changes {
-			fmt.Fprintf(&b, "  · %s：%g %s至 %g\n",
-				c.GroupName, c.OldRatio, arrowFor(c.OldRatio, c.NewRatio), c.NewRatio)
+			items = append(items, fmt.Sprintf("%s：倍率 %s，补全倍率 %s",
+				MarkdownCode(c.GroupName),
+				MarkdownCode(fmt.Sprintf("%g -> %g", c.OldRatio, c.NewRatio)),
+				MarkdownCode(fmt.Sprintf("%g -> %g", c.OldComp, c.NewComp))))
 		}
-		fmt.Fprintf(&b, "时间：%s", now.Format("2006-01-02 15:04"))
 	}
 
 	// ModelName 在合并消息里没有单一值；填空，订阅过滤改在 Dispatcher 里按"先按订阅切片再合并"处理。
@@ -157,8 +174,13 @@ func BuildRateBatchMessage(channel *storage.Channel, event storage.NotificationE
 		Event:     storage.EventRateChanged,
 		ChannelID: channel.ID,
 		ModelName: "",
-		Subject:   fmt.Sprintf("【倍率变化提醒】%s · %d 个分组变动", channel.Name, len(changes)),
-		Body:      b.String(),
+		Subject:   fmt.Sprintf("倍率变化 · %s · %d 项", channel.Name, len(changes)),
+		Body: MarkdownDetails(
+			"多个分组的倍率发生变化。",
+			Detail("渠道", channel.Name),
+			Detail("变动数量", len(changes)),
+			Detail("变化时间", now.Format("2006-01-02 15:04:05")),
+		) + MarkdownSection("变动明细", items),
 	}
 }
 
@@ -168,28 +190,33 @@ func BuildRateStructureMessage(channel *storage.Channel, change RateStructureCha
 		return Message{}
 	}
 	now := time.Now()
-	var b strings.Builder
-	fmt.Fprintf(&b, "渠道：%s\n共 %d 个分组变动", channel.Name, total)
+	addedItems := make([]string, 0, len(change.Added))
 	if len(change.Added) > 0 {
-		fmt.Fprintf(&b, "\n\n新增 %d 个分组：\n", len(change.Added))
 		for _, c := range change.Added {
-			fmt.Fprintf(&b, "  · %s：倍率 %g\n", c.GroupName, c.NewRatio)
+			addedItems = append(addedItems, fmt.Sprintf("%s：倍率 %s，补全倍率 %s",
+				MarkdownCode(c.GroupName), MarkdownCode(fmt.Sprintf("%g", c.NewRatio)), MarkdownCode(fmt.Sprintf("%g", c.NewComp))))
 		}
 	}
+	removedItems := make([]string, 0, len(change.Removed))
 	if len(change.Removed) > 0 {
-		fmt.Fprintf(&b, "\n删除 %d 个分组：\n", len(change.Removed))
 		for _, c := range change.Removed {
-			fmt.Fprintf(&b, "  · %s：原倍率 %g\n", c.GroupName, c.OldRatio)
+			removedItems = append(removedItems, fmt.Sprintf("%s：原倍率 %s，原补全倍率 %s",
+				MarkdownCode(c.GroupName), MarkdownCode(fmt.Sprintf("%g", c.OldRatio)), MarkdownCode(fmt.Sprintf("%g", c.OldComp))))
 		}
 	}
-	fmt.Fprintf(&b, "\n时间：%s", now.Format("2006-01-02 15:04"))
 
 	return Message{
 		Event:     storage.EventRateStructureChanged,
 		ChannelID: channel.ID,
 		ModelName: "",
-		Subject:   fmt.Sprintf("[分组变动通知] %s · 新增 %d / 删除 %d", channel.Name, len(change.Added), len(change.Removed)),
-		Body:      b.String(),
+		Subject:   fmt.Sprintf("分组结构变化 · %s · 新增 %d / 移除 %d", channel.Name, len(change.Added), len(change.Removed)),
+		Body: MarkdownDetails(
+			"上游分组结构发生变化。",
+			Detail("渠道", channel.Name),
+			Detail("新增数量", len(change.Added)),
+			Detail("移除数量", len(change.Removed)),
+			Detail("发现时间", now.Format("2006-01-02 15:04:05")),
+		) + MarkdownSection("新增分组", addedItems) + MarkdownSection("移除分组", removedItems),
 	}
 }
 

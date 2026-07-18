@@ -178,11 +178,20 @@ func (s *Service) notifyProfitTransition(ctx context.Context, pool *storage.Main
 	}
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event: event, ChannelID: member.SourceChannelID, ModelName: group.Name,
-		Subject: fmt.Sprintf("[%s] %s · 成员 #%d", subject, pool.Name, member.ID),
-		Body: fmt.Sprintf("账号池：%s\n成员：#%d\n主站 Account：%s\n主站分组：%s\n销售倍率：%s\n成本倍率：%s\n利润率：%.2f%%\n成本来源：%s\n状态：%s\n原因：%s",
-			pool.Name, member.ID, member.RemoteAccountName, group.Name,
-			formatScaled(check.SaleMultiplierMicros), formatScaled(check.CostMultiplierMicros), float64(check.MarginBasisPoints)/100,
-			check.CostSource, check.Status, check.Reason),
+		Subject: fmt.Sprintf("%s · %s · 成员 #%d", subject, pool.Name, member.ID),
+		Body: notify.MarkdownDetails(
+			"主站成员利润状态发生变化。",
+			notify.Detail("账号池", pool.Name),
+			notify.Detail("成员", fmt.Sprintf("#%d", member.ID)),
+			notify.Detail("主站账号", member.RemoteAccountName),
+			notify.Detail("主站分组", group.Name),
+			notify.Detail("销售倍率", formatScaled(check.SaleMultiplierMicros)),
+			notify.Detail("成本倍率", formatScaled(check.CostMultiplierMicros)),
+			notify.Detail("利润率", fmt.Sprintf("%.2f%%", float64(check.MarginBasisPoints)/100)),
+			notify.Detail("成本来源", check.CostSource),
+			notify.Detail("当前状态", notificationStatusLabel(check.Status)),
+			notify.Detail("判定原因", check.Reason),
+		) + notify.MarkdownNote("系统动作", profitTransitionAction(check.Status)),
 	})
 }
 
@@ -201,10 +210,24 @@ func (s *Service) notifyPoolProfitTransition(ctx context.Context, pool *storage.
 	}
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event:   event,
-		Subject: fmt.Sprintf("[主站账号池%s] %s", pool.LastStatus, pool.Name),
-		Body: fmt.Sprintf("账号池：%s\n状态：%s -> %s\n健康利润项：%d\n风险项：%d\n未知项：%d\n不支持项：%d",
-			pool.Name, oldStatus, pool.LastStatus, result.Healthy, result.Risk, result.Unknown, result.Unsupported),
+		Subject: fmt.Sprintf("账号池利润告警 · %s · %s", notificationStatusLabel(pool.LastStatus), pool.Name),
+		Body: notify.MarkdownDetails(
+			"账号池整体利润状态已触发风险保护。",
+			notify.Detail("账号池", pool.Name),
+			notify.Detail("状态变化", fmt.Sprintf("%s -> %s", notificationStatusLabel(oldStatus), notificationStatusLabel(pool.LastStatus))),
+			notify.Detail("健康利润项", result.Healthy),
+			notify.Detail("风险项", result.Risk),
+			notify.Detail("未知项", result.Unknown),
+			notify.Detail("不支持项", result.Unsupported),
+		) + notify.MarkdownNote("处理建议", "请检查风险成员的成本倍率、销售倍率和利润保护配置。"),
 	})
+}
+
+func profitTransitionAction(status string) string {
+	if status == "healthy" {
+		return "利润条件已经恢复，成员将按账号池策略重新参与调度。"
+	}
+	return "成员将按利润保护策略降级或停用，条件恢复后自动重新启用。"
 }
 
 func formatScaled(value int64) string {

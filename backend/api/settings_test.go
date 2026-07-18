@@ -12,16 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestSaveSettingsKeepsAppVersion(t *testing.T) {
+func TestSaveSettingsConfig(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	cfg := &config.Config{
-		App: config.AppConfig{
-			Title:              "Old",
-			NotificationPrefix: "[Old] ",
-		},
-	}
+	cfg := &config.Config{}
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
@@ -33,7 +28,6 @@ func TestSaveSettingsKeepsAppVersion(t *testing.T) {
 	})
 
 	body := `{
-		"app":{"title":"New","notificationPrefix":"[New] "},
 		"auth":{"enabled":false,"username":"admin","password":"","tokenSecret":"","sessionTTLHours":168},
 		"scheduler":{"balanceCron":"37 */15 * * * *","rateCron":"13 */30 * * * *","concurrency":4,"retention":{"cron":"0 17 3 * * *","monitorLogsDays":30,"balanceSnapshotsDays":90,"notificationLogsDays":90,"announcementsDays":90}},
 		"notifications":{"batchRateChanges":true,"minChangePct":0,"balanceLowCooldownMinutes":60,"subscriptionDailyRemainingThresholdPct":0,"subscriptionWeeklyRemainingThresholdPct":0,"subscriptionMonthlyRemainingThresholdPct":0,"subscriptionExpiryThresholdHours":0,"subscriptionAlertCooldownMinutes":1440,"sendMaxAttempts":3},
@@ -52,16 +46,20 @@ func TestSaveSettingsKeepsAppVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if got.App.Title != "New" {
-		t.Fatalf("title = %q", got.App.Title)
-	}
-	if got.App.NotificationPrefix != "[New] " {
-		t.Fatalf("notification prefix = %q", got.App.NotificationPrefix)
-	}
 	if !got.Proxy.Enabled || !got.Proxy.VersionCheckEnabled || got.Proxy.Protocol != "socks5" || got.Proxy.Host != "127.0.0.1" || got.Proxy.Port != 1080 || got.Proxy.Username != "u" || got.Proxy.Password != "p" {
 		t.Fatalf("proxy = %#v", got.Proxy)
 	}
 	if got.Upstream.TimeoutSeconds != 45 || got.Upstream.UserAgent != "custom-agent" {
 		t.Fatalf("upstream = %#v", got.Upstream)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/settings/config", nil)
+	getRec := httptest.NewRecorder()
+	r.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, body = %s", getRec.Code, getRec.Body.String())
+	}
+	if strings.Contains(getRec.Body.String(), `"app"`) {
+		t.Fatalf("settings response still contains app config: %s", getRec.Body.String())
 	}
 }

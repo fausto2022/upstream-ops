@@ -2037,7 +2037,7 @@ func TestApplySyncGroupDispatchesFailureNotificationWithDisabledPlaceholder(t *t
 		t.Fatalf("notification body = %#v", body)
 	}
 	bodyText := fmt.Sprint(body["body"])
-	for _, want := range []string{"变动账号：", "失败账号：", "已自动禁用", "source group missing", "变动账号数：1", "失败账号数：1"} {
+	for _, want := range []string{"#### 变动账号", "#### 失败账号", "已自动禁用", "source group missing", "*变动账号数：* `1`", "*失败账号数：* `1`"} {
 		if !strings.Contains(bodyText, want) {
 			t.Fatalf("notification body missing %q: %s", want, bodyText)
 		}

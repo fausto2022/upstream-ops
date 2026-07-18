@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/fausto2022/relaydeck/backend/crypto"
 	"github.com/fausto2022/relaydeck/backend/storage"
 )
+
+const notificationSubjectPrefix = "[RelayDeck] "
 
 // Dispatcher 把单条事件 fan-out 到所有启用的通知渠道，并按 Policy 做去抖。
 type Dispatcher struct {
@@ -334,11 +337,10 @@ func (d *Dispatcher) applyProxy(ch *storage.NotificationChannel, n Notifier) err
 }
 
 func (d *Dispatcher) withNotificationPrefix(msg Message) Message {
-	prefix := d.Policy().NotificationPrefix
-	if prefix == "" || msg.Subject == "" {
+	if msg.Subject == "" || strings.HasPrefix(msg.Subject, notificationSubjectPrefix) {
 		return msg
 	}
-	msg.Subject = prefix + msg.Subject
+	msg.Subject = notificationSubjectPrefix + msg.Subject
 	return msg
 }
 

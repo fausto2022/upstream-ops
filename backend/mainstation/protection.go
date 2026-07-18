@@ -335,10 +335,17 @@ func (s *Service) notifyPoolCapacityTransition(ctx context.Context, pool *storag
 	}
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event:   event,
-		Subject: fmt.Sprintf("[主站账号池%s] %s", result.Status, pool.Name),
-		Body: fmt.Sprintf("账号池：%s\n状态：%s -> %s\n健康成员：%d\n盈利成员：%d\n合格成员：%d\n可调度成员：%d\n有效并发：%d",
-			pool.Name, oldStatus, result.Status, result.HealthyMembers, result.ProfitableMembers,
-			result.QualifiedMembers, result.SchedulableMembers, result.EffectiveConcurrency),
+		Subject: fmt.Sprintf("账号池容量告警 · %s · %s", notificationStatusLabel(result.Status), pool.Name),
+		Body: notify.MarkdownDetails(
+			"账号池容量已触发风险保护。",
+			notify.Detail("账号池", pool.Name),
+			notify.Detail("状态变化", fmt.Sprintf("%s -> %s", notificationStatusLabel(oldStatus), notificationStatusLabel(result.Status))),
+			notify.Detail("健康成员", result.HealthyMembers),
+			notify.Detail("盈利成员", result.ProfitableMembers),
+			notify.Detail("合格成员", result.QualifiedMembers),
+			notify.Detail("可调度成员", result.SchedulableMembers),
+			notify.Detail("有效并发", result.EffectiveConcurrency),
+		) + notify.MarkdownNote("处理建议", "请检查异常成员、利润风险和账号池最低容量配置。"),
 	})
 }
 

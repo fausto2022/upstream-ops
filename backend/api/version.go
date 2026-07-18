@@ -50,18 +50,14 @@ func registerVersion(api *gin.RouterGroup, d *Deps) {
 }
 
 func buildVersionResponse(ctx context.Context, d *Deps, force bool) versionResponse {
-	app := config.AppConfig{Title: "RelayDeck"}
 	proxyCfg := config.ProxyConfig{}
 	if d != nil && d.Runtime != nil {
-		if cfg, err := config.LoadFile(d.Runtime.ConfigPath()); err == nil {
-			app = cfg.App
-		}
 		proxyCfg = d.Runtime.CurrentProxy()
 	}
 
 	resp := versionResponse{
 		Name:    "relaydeck",
-		Title:   app.Title,
+		Title:   "RelayDeck",
 		Version: global.VERSION,
 		RepoURL: githubRepoURL,
 	}

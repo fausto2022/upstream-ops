@@ -173,11 +173,15 @@ func (s *Service) notifyOrphanedMembers(ctx context.Context, members []storage.M
 		message := notify.Message{
 			Event:     storage.EventMainMemberBindingLost,
 			ChannelID: member.SourceChannelID,
-			Subject:   fmt.Sprintf("[主站绑定失效] %s · 成员 #%d", poolName, member.ID),
-			Body: fmt.Sprintf(
-				"账号池：%s\n成员：#%d\n主站 Account：%s (ID %d)\n上游渠道 ID：%d\n上游分组：%s\n动作：已标记 orphaned，并停止自动写入远端。",
-				poolName, member.ID, member.RemoteAccountName, remoteID, member.SourceChannelID, member.SourceGroupName,
-			),
+			Subject:   fmt.Sprintf("主站绑定失效 · %s · 成员 #%d", poolName, member.ID),
+			Body: notify.MarkdownDetails(
+				"同步结果中已找不到该主站账号，原绑定关系失效。",
+				notify.Detail("账号池", poolName),
+				notify.Detail("成员", fmt.Sprintf("#%d", member.ID)),
+				notify.Detail("主站账号", fmt.Sprintf("%s (ID %d)", member.RemoteAccountName, remoteID)),
+				notify.Detail("上游渠道 ID", member.SourceChannelID),
+				notify.Detail("上游分组", member.SourceGroupName),
+			) + notify.MarkdownNote("系统动作", "成员已标记为绑定失效，并停止向远端自动写入。请重新确认并绑定对应账号。"),
 			Extra: map[string]any{"pool_id": member.PoolID, "member_id": member.ID, "remote_account_id": remoteID},
 		}
 		if err := s.dispatcher.Dispatch(ctx, message); err != nil && s.log != nil {

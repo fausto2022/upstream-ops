@@ -8,7 +8,6 @@ import (
 )
 
 type settingsConfigView struct {
-	App           config.AppConfig           `json:"app"`
 	Auth          config.AuthConfig          `json:"auth"`
 	Scheduler     config.SchedulerConfig     `json:"scheduler"`
 	Notifications config.NotificationsConfig `json:"notifications"`
@@ -17,7 +16,6 @@ type settingsConfigView struct {
 }
 
 type settingsConfigInput struct {
-	App           config.AppConfig           `json:"app" binding:"required"`
 	Auth          config.AuthConfig          `json:"auth" binding:"required"`
 	Scheduler     config.SchedulerConfig     `json:"scheduler" binding:"required"`
 	Notifications config.NotificationsConfig `json:"notifications" binding:"required"`
@@ -43,7 +41,6 @@ func getSettingsConfig(c *gin.Context, d *Deps) {
 		"data": gin.H{
 			"config_path": d.Runtime.ConfigPath(),
 			"config": settingsConfigView{
-				App:           cfg.App,
 				Auth:          cfg.Auth,
 				Scheduler:     cfg.Scheduler,
 				Notifications: cfg.Notifications,
@@ -68,8 +65,6 @@ func saveSettingsConfig(c *gin.Context, d *Deps) {
 		return
 	}
 
-	cfg.App.Title = in.App.Title
-	cfg.App.NotificationPrefix = in.App.NotificationPrefix
 	cfg.Auth = in.Auth
 	cfg.Scheduler = in.Scheduler
 	cfg.Notifications = in.Notifications

@@ -357,8 +357,10 @@ func TestRefreshRatesEmitsRateAddedAndRemoved(t *testing.T) {
 	for _, log := range logs {
 		if log.Event == storage.EventRateStructureChanged {
 			structureChanged++
-			if !strings.Contains(log.Subject, "[分组变动通知]") ||
-				!strings.Contains(log.Subject, "新增 1 / 删除 1") ||
+			if !strings.Contains(log.Subject, "[RelayDeck] 分组结构变化") ||
+				!strings.Contains(log.Subject, "新增 1 / 移除 1") ||
+				!strings.Contains(log.Body, "#### 新增分组") ||
+				!strings.Contains(log.Body, "#### 移除分组") ||
 				!strings.Contains(log.Body, "gamma") ||
 				!strings.Contains(log.Body, "alpha") {
 				t.Fatalf("unexpected structure change log = %#v", log)
@@ -604,11 +606,11 @@ func TestRateEventSubscriptionFiltersGroups(t *testing.T) {
 		if log.Event != storage.EventRateStructureChanged {
 			continue
 		}
-		if strings.Contains(log.Subject, "新增 1 / 删除 0") &&
+		if strings.Contains(log.Subject, "新增 1 / 移除 0") &&
 			strings.Contains(log.Body, "beta") {
 			foundAddedBeta = true
 		}
-		if strings.Contains(log.Subject, "新增 0 / 删除 1") &&
+		if strings.Contains(log.Subject, "新增 0 / 移除 1") &&
 			strings.Contains(log.Body, "beta") {
 			foundRemovedBeta = true
 		}

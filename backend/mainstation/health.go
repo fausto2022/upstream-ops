@@ -914,9 +914,16 @@ func (s *Service) notifyHealthBudgetExceeded(ctx context.Context, pool *storage.
 	}
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event: storage.EventHealthProbeBudgetExceeded, ChannelID: member.SourceChannelID,
-		Subject: fmt.Sprintf("[测活预算已用尽] %s · 成员 #%d", pool.Name, member.ID),
-		Body: fmt.Sprintf("账号池：%s\n成员：#%d\n层级：%s\n今日 L1：%d/%d\n今日 L2：%d/%d\n今日 Token：%d/%d\n动作：暂停非必要 L1/L2，继续 L0。",
-			pool.Name, member.ID, level, budget.DailyL1Used, budget.DailyL1Limit, budget.DailyL2Used, budget.DailyL2Limit, budget.DailyTokens, budget.TokenLimit),
+		Subject: fmt.Sprintf("测活预算用尽 · %s · 成员 #%d", pool.Name, member.ID),
+		Body: notify.MarkdownDetails(
+			"该成员的今日测活预算已用尽。",
+			notify.Detail("账号池", pool.Name),
+			notify.Detail("成员", fmt.Sprintf("#%d", member.ID)),
+			notify.Detail("测活层级", level),
+			notify.Detail("L1 用量", fmt.Sprintf("%d / %d", budget.DailyL1Used, budget.DailyL1Limit)),
+			notify.Detail("L2 用量", fmt.Sprintf("%d / %d", budget.DailyL2Used, budget.DailyL2Limit)),
+			notify.Detail("Token 用量", fmt.Sprintf("%d / %d", budget.DailyTokens, budget.TokenLimit)),
+		) + notify.MarkdownNote("系统动作", "已暂停非必要的 L1/L2 测活，基础 L0 探测继续运行。"),
 	})
 }
 
@@ -937,10 +944,27 @@ func (s *Service) notifyHealthTransition(ctx context.Context, pool *storage.Main
 	}
 	_ = s.dispatcher.Dispatch(ctx, notify.Message{
 		Event: event, ChannelID: member.SourceChannelID,
-		Subject: fmt.Sprintf("[%s] %s · 成员 #%d", subject, pool.Name, member.ID),
-		Body: fmt.Sprintf("账号池：%s\n成员：#%d\n主站 Account：%s\n状态：%s -> %s\n层级：%s\n模型：%s\n错误：%s\n连续失败：%d\n延迟：%dms",
-			pool.Name, member.ID, member.RemoteAccountName, oldHealth, newHealth, check.Level, check.Model, check.ErrorClass, member.ConsecutiveHealthFailure, check.LatencyMS),
+		Subject: fmt.Sprintf("%s · %s · 成员 #%d", subject, pool.Name, member.ID),
+		Body: notify.MarkdownDetails(
+			"主站成员健康状态发生变化。",
+			notify.Detail("账号池", pool.Name),
+			notify.Detail("成员", fmt.Sprintf("#%d", member.ID)),
+			notify.Detail("主站账号", member.RemoteAccountName),
+			notify.Detail("状态变化", fmt.Sprintf("%s -> %s", notificationStatusLabel(oldHealth), notificationStatusLabel(newHealth))),
+			notify.Detail("测活层级", check.Level),
+			notify.Detail("探测模型", check.Model),
+			notify.Detail("错误类型", check.ErrorClass),
+			notify.Detail("连续失败", member.ConsecutiveHealthFailure),
+			notify.Detail("请求延迟", fmt.Sprintf("%d ms", check.LatencyMS)),
+		) + notify.MarkdownNote("系统动作", healthTransitionAction(newHealth)),
 	})
+}
+
+func healthTransitionAction(newHealth string) string {
+	if newHealth == "healthy" {
+		return "成员已恢复健康，后续调度将按当前账号池策略自动恢复。"
+	}
+	return "成员将按健康保护策略降级或停用，后台仍会持续探测恢复情况。"
 }
 
 func parseHealthPolicy(raw string) healthPolicy {
