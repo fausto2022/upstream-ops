@@ -150,6 +150,7 @@ func (s *Service) GetConfig() (*ConfigDTO, error) {
 	dto.AutoMarginProtection = config.AutoMarginProtection
 	dto.AutoHealthProtection = config.AutoHealthProtection
 	dto.AutoRecovery = config.AutoRecovery
+	dto.HealthModels = decodeHealthModels(config.HealthModelsJSON)
 	dto.ObservationEvaluatedAt = config.ObservationEvaluatedAt
 	dto.HealthObservedAt = config.HealthObservedAt
 	dto.MarginObservedAt = config.MarginObservedAt
@@ -185,9 +186,14 @@ func (s *Service) CreateConfig(ctx context.Context, in ConfigInput) (*ConfigDTO,
 	if in.Enabled != nil {
 		enabled = *in.Enabled
 	}
+	healthModelsJSON, err := encodeHealthModels(in.HealthModels)
+	if err != nil {
+		return nil, err
+	}
 	config := &storage.MainStationConfig{
-		ID:      storage.MainStationSingletonID,
-		Enabled: enabled,
+		ID:               storage.MainStationSingletonID,
+		Enabled:          enabled,
+		HealthModelsJSON: healthModelsJSON,
 	}
 	target := &storage.UpstreamSyncTarget{
 		Name:              name,
@@ -272,6 +278,12 @@ func (s *Service) UpdateConfig(ctx context.Context, in ConfigInput) (*ConfigDTO,
 	}
 	if in.AutoRecovery != nil {
 		config.AutoRecovery = *in.AutoRecovery
+	}
+	if in.HealthModels != nil {
+		config.HealthModelsJSON, err = encodeHealthModels(in.HealthModels)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := s.store.UpdateConfigWithTarget(target, config); err != nil {
 		return nil, err

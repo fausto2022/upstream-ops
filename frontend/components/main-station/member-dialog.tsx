@@ -266,8 +266,8 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
               <Input id="account-priority" type="number" min={1} step={1} value={priority} onChange={(event) => setPriority(Number(event.target.value))} />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="account-health-model">完整检测模型（可选）</Label>
-              <Input id="account-health-model" value={healthModel} onChange={(event) => setHealthModel(event.target.value)} placeholder="留空时只执行快速检测" />
+              <Label htmlFor="account-health-model">账号探活模型（可选）</Label>
+              <Input id="account-health-model" value={healthModel} onChange={(event) => setHealthModel(event.target.value)} placeholder="留空继承平台全局模型" />
             </div>
           </div>
 

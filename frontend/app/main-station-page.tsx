@@ -195,9 +195,11 @@ export default function MainStationPage() {
     }
     setBusyAccountID(account.remote_account_id)
     try {
+      const platform = (account.platform ?? "").trim().toLowerCase()
+      const healthModel = account.member.health_model || config?.health_models?.[platform]
       await apiFetch(`/main-station/groups/${selectedWorkspace.group.id}/accounts/${account.member.id}/check`, {
         method: "POST",
-        body: JSON.stringify({ level: account.member.health_model ? "L1" : "L0", force: true }),
+        body: JSON.stringify({ level: healthModel ? "L1" : "L0", force: true }),
       })
       toast.success("账号检测完成")
       await loadAccounts(selectedGroupID)

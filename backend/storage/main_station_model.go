@@ -18,6 +18,7 @@ type MainStationConfig struct {
 	AutoMarginProtection   bool       `gorm:"not null;default:false" json:"auto_margin_protection"`
 	AutoHealthProtection   bool       `gorm:"not null;default:false" json:"auto_health_protection"`
 	AutoRecovery           bool       `gorm:"not null;default:false" json:"auto_recovery"`
+	HealthModelsJSON       string     `gorm:"type:text;not null;default:'{}'" json:"-"`
 	ObservationEvaluatedAt *time.Time `json:"observation_evaluated_at,omitempty"`
 	HealthObservedAt       *time.Time `json:"health_observed_at,omitempty"`
 	MarginObservedAt       *time.Time `json:"margin_observed_at,omitempty"`

@@ -609,10 +609,17 @@ export interface MainStationConfig {
   auto_margin_protection: boolean
   auto_health_protection: boolean
   auto_recovery: boolean
+  health_models: Record<string, string>
   observation_evaluated_at?: string | null
   health_observed_at?: string | null
   margin_observed_at?: string | null
   migration?: MainStationMigrationState
+}
+
+export interface MainStationHealthModelCatalog {
+  platform: string
+  models: string[]
+  error?: string
 }
 
 export interface MainStationGroup extends UpstreamSyncTargetGroup {

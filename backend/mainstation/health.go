@@ -87,6 +87,7 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 	if member.BindingStatus == "orphaned" || member.BindingStatus == "invalid" {
 		return nil, errors.New("member binding is invalid")
 	}
+	model := effectiveHealthModel(pool.Platform, member.HealthModel, s.configuredHealthModels())
 	policy := parseHealthPolicy(pool.HealthPolicyJSON)
 	release, err := s.acquireHealthSlot(ctx, member.ID, member.SourceChannelID, level)
 	if err != nil {
@@ -125,7 +126,7 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 	}
 
 	startedAt := s.now()
-	execution := s.executeHealthProbe(ctx, level, member)
+	execution := s.executeHealthProbe(ctx, level, model, member)
 	finishedAt := s.now()
 	check := storage.MainAccountHealthCheck{
 		PoolID:          pool.ID,
@@ -234,7 +235,7 @@ func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainA
 	return "", nil
 }
 
-func (s *Service) executeHealthProbe(ctx context.Context, level string, member *storage.MainAccountPoolMember) probeExecution {
+func (s *Service) executeHealthProbe(ctx context.Context, level, model string, member *storage.MainAccountPoolMember) probeExecution {
 	if member.RemoteAccountID == nil {
 		return probeExecution{Status: "config_error", ErrorClass: "binding_missing", Message: "member has no remote account binding"}
 	}
@@ -242,9 +243,9 @@ func (s *Service) executeHealthProbe(ctx context.Context, level string, member *
 	case "L0":
 		return s.executeL0(ctx, member)
 	case "L1":
-		return s.executeL1(ctx, member)
+		return s.executeL1(ctx, model, member)
 	case "L2":
-		return s.executeL2(ctx, member)
+		return s.executeL2(ctx, model, member)
 	default:
 		return probeExecution{Status: "config_error", ErrorClass: "invalid_level", Message: "invalid health check level"}
 	}
@@ -268,8 +269,8 @@ func (s *Service) executeL0(ctx context.Context, member *storage.MainAccountPool
 	})
 }
 
-func (s *Service) executeL1(ctx context.Context, member *storage.MainAccountPoolMember) probeExecution {
-	model := strings.TrimSpace(member.HealthModel)
+func (s *Service) executeL1(ctx context.Context, model string, member *storage.MainAccountPoolMember) probeExecution {
+	model = strings.TrimSpace(model)
 	if model == "" {
 		return probeExecution{Status: "config_error", ErrorClass: "test_model_missing", Message: "low-cost health model is not configured"}
 	}
@@ -312,8 +313,8 @@ func (s *Service) executeL1(ctx context.Context, member *storage.MainAccountPool
 	return s.performProbeRequest(ctx, channel, secret, request)
 }
 
-func (s *Service) executeL2(ctx context.Context, member *storage.MainAccountPoolMember) probeExecution {
-	model := strings.TrimSpace(member.HealthModel)
+func (s *Service) executeL2(ctx context.Context, model string, member *storage.MainAccountPoolMember) probeExecution {
+	model = strings.TrimSpace(model)
 	if model == "" {
 		return probeExecution{Status: "config_error", ErrorClass: "test_model_missing", Protocol: "sub2api_account_test", Message: "account test model is not configured"}
 	}
@@ -768,6 +769,7 @@ func (s *Service) RunDueHealthChecks(ctx context.Context) {
 	}
 	tasks := make([]task, 0, healthSchedulerBatchLimit)
 	poolCache := make(map[uint]*storage.MainAccountPool)
+	globalModels := s.configuredHealthModels()
 	for _, member := range members {
 		if len(tasks) >= healthSchedulerBatchLimit {
 			break
@@ -784,8 +786,9 @@ func (s *Service) RunDueHealthChecks(ctx context.Context) {
 			poolCache[member.PoolID] = pool
 		}
 		policy := parseHealthPolicy(pool.HealthPolicyJSON)
+		model := effectiveHealthModel(pool.Platform, member.HealthModel, globalModels)
 		for _, level := range []string{"L0", "L1", "L2"} {
-			if level != "L0" && strings.TrimSpace(member.HealthModel) == "" {
+			if level != "L0" && model == "" {
 				continue
 			}
 			if s.healthLevelDue(&member, policy, level, s.now()) {

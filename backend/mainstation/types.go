@@ -32,6 +32,7 @@ type ConfigDTO struct {
 	AutoMarginProtection   bool               `json:"auto_margin_protection"`
 	AutoHealthProtection   bool               `json:"auto_health_protection"`
 	AutoRecovery           bool               `json:"auto_recovery"`
+	HealthModels           map[string]string  `json:"health_models"`
 	ObservationEvaluatedAt *time.Time         `json:"observation_evaluated_at,omitempty"`
 	HealthObservedAt       *time.Time         `json:"health_observed_at,omitempty"`
 	MarginObservedAt       *time.Time         `json:"margin_observed_at,omitempty"`
@@ -39,14 +40,21 @@ type ConfigDTO struct {
 }
 
 type ConfigInput struct {
-	TargetID             uint   `json:"target_id,omitempty"`
-	Name                 string `json:"name"`
-	BaseURL              string `json:"base_url"`
-	AdminAPIKey          string `json:"admin_api_key"`
-	Enabled              *bool  `json:"enabled,omitempty"`
-	AutoMarginProtection *bool  `json:"auto_margin_protection,omitempty"`
-	AutoHealthProtection *bool  `json:"auto_health_protection,omitempty"`
-	AutoRecovery         *bool  `json:"auto_recovery,omitempty"`
+	TargetID             uint              `json:"target_id,omitempty"`
+	Name                 string            `json:"name"`
+	BaseURL              string            `json:"base_url"`
+	AdminAPIKey          string            `json:"admin_api_key"`
+	Enabled              *bool             `json:"enabled,omitempty"`
+	AutoMarginProtection *bool             `json:"auto_margin_protection,omitempty"`
+	AutoHealthProtection *bool             `json:"auto_health_protection,omitempty"`
+	AutoRecovery         *bool             `json:"auto_recovery,omitempty"`
+	HealthModels         map[string]string `json:"health_models,omitempty"`
+}
+
+type HealthModelCatalog struct {
+	Platform string   `json:"platform"`
+	Models   []string `json:"models"`
+	Error    string   `json:"error,omitempty"`
 }
 
 type SyncResult struct {

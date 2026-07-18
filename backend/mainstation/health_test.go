@@ -106,6 +106,64 @@ func TestHealthChecksUseControlledOutputLimitsAndClassifyFailures(t *testing.T) 
 	}
 }
 
+func TestGlobalHealthModelCatalogAndInheritance(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v1/models":
+			if request.Header.Get("Authorization") != "Bearer sk-source-secret" {
+				t.Fatalf("model authorization = %q", request.Header.Get("Authorization"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "gpt-global"}, {"id": "gpt-other"}}})
+		case "/v1/chat/completions":
+			var body map[string]any
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatalf("decode health body: %v", err)
+			}
+			if body["model"] != "gpt-global" {
+				t.Fatalf("health model = %#v, want gpt-global", body["model"])
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]any{"content": "OK"}}}})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	service, db, admin, _ := newTestService(t)
+	member := createHealthMember(t, service, db, admin, server.URL, "")
+	if err := db.Model(member).Update("health_model", "").Error; err != nil {
+		t.Fatalf("clear member health model: %v", err)
+	}
+	config, err := service.UpdateConfig(context.Background(), ConfigInput{HealthModels: map[string]string{"OpenAI": "gpt-global"}})
+	if err != nil {
+		t.Fatalf("save global health model: %v", err)
+	}
+	if config.HealthModels["openai"] != "gpt-global" {
+		t.Fatalf("health models = %#v", config.HealthModels)
+	}
+	catalogs, err := service.ListHealthModelCatalogs(context.Background())
+	if err != nil {
+		t.Fatalf("list health model catalogs: %v", err)
+	}
+	var openAICatalog *HealthModelCatalog
+	for i := range catalogs {
+		if catalogs[i].Platform == "openai" {
+			openAICatalog = &catalogs[i]
+			break
+		}
+	}
+	if openAICatalog == nil || len(openAICatalog.Models) != 2 || openAICatalog.Error != "" {
+		t.Fatalf("health model catalogs = %#v", catalogs)
+	}
+	result, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L1", Force: true})
+	if err != nil {
+		t.Fatalf("global model health check: %v", err)
+	}
+	if result.Check.Model != "gpt-global" || result.Check.Status != "success" {
+		t.Fatalf("global model result = %#v", result.Check)
+	}
+}
+
 func TestHealthBudgetStopsNonEssentialProbe(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

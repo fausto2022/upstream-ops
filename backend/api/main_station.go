@@ -74,6 +74,14 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		c.JSON(http.StatusOK, result)
 	})
+	group.GET("/health-models", func(c *gin.Context) {
+		result, err := d.MainStation.ListHealthModelCatalogs(c.Request.Context())
+		if err != nil {
+			failMainStation(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
 	group.GET("/protection-preview", func(c *gin.Context) {
 		result, err := d.MainStation.ProtectionPreview()
 		if err != nil {

@@ -617,7 +617,7 @@ func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*stora
 		}
 		return nil, s.failManagedMember(member, err)
 	}
-	if strings.TrimSpace(member.HealthModel) != "" {
+	if effectiveHealthModel(pool.Platform, member.HealthModel, s.configuredHealthModels()) != "" {
 		l1, err := s.CheckMember(ctx, poolID, member.ID, HealthCheckInput{Level: "L1", Force: true})
 		if err != nil || l1.Check.Status != "success" {
 			if err == nil {

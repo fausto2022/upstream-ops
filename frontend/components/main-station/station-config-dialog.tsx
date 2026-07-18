@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { PlugZap, Save } from "lucide-react"
+import { PlugZap, RefreshCw, Save } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,6 +23,7 @@ import { Switch } from "@/components/ui/switch"
 import { apiFetch } from "@/lib/api"
 import type {
   MainStationConfig,
+  MainStationHealthModelCatalog,
   UpstreamSyncTarget,
 } from "@/lib/api-types"
 
@@ -45,6 +46,9 @@ export function StationConfigDialog({
   const [baseURL, setBaseURL] = useState("")
   const [adminAPIKey, setAdminAPIKey] = useState("")
   const [enabled, setEnabled] = useState(true)
+  const [healthModels, setHealthModels] = useState<Record<string, string>>({})
+  const [modelCatalogs, setModelCatalogs] = useState<MainStationHealthModelCatalog[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
   const [busy, setBusy] = useState<"test" | "save" | null>(null)
 
   useEffect(() => {
@@ -54,6 +58,9 @@ export function StationConfigDialog({
     setBaseURL(config?.base_url ?? "")
     setAdminAPIKey("")
     setEnabled(config?.enabled ?? true)
+    setHealthModels(config?.health_models ?? {})
+    setModelCatalogs([])
+    if (config?.configured) void loadHealthModels()
     if (!config?.configured && config?.migration?.status === "requires_confirmation") {
       void apiFetch<UpstreamSyncTarget[]>("/upstream-sync/targets")
         .then(setTargets)
@@ -64,6 +71,18 @@ export function StationConfigDialog({
       setTargets([])
     }
   }, [config, open])
+
+  async function loadHealthModels() {
+    setModelsLoading(true)
+    try {
+      const catalogs = await apiFetch<MainStationHealthModelCatalog[]>("/main-station/health-models")
+      setModelCatalogs(catalogs)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "获取模型列表失败")
+    } finally {
+      setModelsLoading(false)
+    }
+  }
 
   function selectTarget(value: string) {
     const id = Number(value)
@@ -122,6 +141,7 @@ export function StationConfigDialog({
           base_url: baseURL.trim(),
           admin_api_key: adminAPIKey.trim(),
           enabled,
+          health_models: healthModels,
         }),
       })
       onSaved(saved)
@@ -134,9 +154,17 @@ export function StationConfigDialog({
     }
   }
 
+  const catalogs = [...modelCatalogs]
+  for (const platform of Object.keys(healthModels)) {
+    if (!catalogs.some((item) => item.platform === platform)) {
+      catalogs.push({ platform, models: [] })
+    }
+  }
+  catalogs.sort((left, right) => left.platform.localeCompare(right.platform))
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{config?.configured ? "编辑主站" : "配置主站"}</DialogTitle>
           <DialogDescription>
@@ -193,6 +221,43 @@ export function StationConfigDialog({
               autoComplete="new-password"
             />
           </div>
+          {config?.configured ? (
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <Label>全局探活模型</Label>
+                <Button type="button" variant="ghost" size="icon" title="刷新模型列表" onClick={() => void loadHealthModels()} disabled={modelsLoading}>
+                  <RefreshCw className={modelsLoading ? "size-4 animate-spin" : "size-4"} />
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {catalogs.map((catalog) => {
+                  const selected = healthModels[catalog.platform] ?? ""
+                  const options = Array.from(new Set([...catalog.models, selected].filter(Boolean)))
+                  return (
+                    <div key={catalog.platform} className="space-y-2">
+                      <Label>{healthPlatformLabel(catalog.platform)}</Label>
+                      <Select
+                        value={selected || "__none__"}
+                        onValueChange={(value) => setHealthModels((current) => {
+                          const next = { ...current }
+                          if (value === "__none__") delete next[catalog.platform]
+                          else next[catalog.platform] = value
+                          return next
+                        })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">仅快速检测</SelectItem>
+                          {options.map((model) => <SelectItem key={model} value={model}>{model}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {catalog.error ? <p className="text-xs text-destructive">{catalog.error}</p> : null}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between gap-4 border-t pt-4">
             <div>
               <Label htmlFor="main-station-enabled">启用主站管理</Label>
@@ -215,4 +280,13 @@ export function StationConfigDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function healthPlatformLabel(platform: string) {
+  switch (platform) {
+    case "openai": return "OpenAI"
+    case "anthropic": return "Anthropic"
+    case "gemini": return "Gemini"
+    default: return platform
+  }
 }

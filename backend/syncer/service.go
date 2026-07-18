@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -198,7 +197,6 @@ type accountApplyResult struct {
 }
 
 const applyAccountWorkerLimit = 5
-const sourceModelsBodyLimit int64 = 8 << 20
 
 type syncAccountApplyOutcome struct {
 	Index        int
@@ -2208,114 +2206,7 @@ func apiKeyUsableForModels(key connector.APIKey) bool {
 }
 
 func fetchGatewayModels(ctx context.Context, baseURL, platform, apiKey string) ([]string, error) {
-	endpoint := buildGatewayModelsURL(baseURL, platform)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	apiKey = strings.TrimSpace(apiKey)
-	req.Header.Set("Accept", "application/json")
-	setGatewayModelAuthHeaders(req, platform, apiKey)
-	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, sourceModelsBodyLimit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(body)) > sourceModelsBodyLimit {
-		return nil, errors.New("model list response is too large")
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("model list request failed with HTTP %d", resp.StatusCode)
-	}
-	models, err := decodeGatewayModels(body)
-	if err != nil {
-		return nil, err
-	}
-	if len(models) == 0 {
-		return nil, errors.New("model list is empty")
-	}
-	return models, nil
-}
-
-func buildGatewayModelsURL(base, platform string) string {
-	normalized := strings.TrimRight(strings.TrimSpace(base), "/")
-	if strings.EqualFold(strings.TrimSpace(platform), "gemini") {
-		if strings.HasSuffix(normalized, "/v1beta/models") {
-			return normalized
-		}
-		if strings.HasSuffix(normalized, "/v1beta") {
-			return normalized + "/models"
-		}
-		return normalized + "/v1beta/models"
-	}
-	if strings.HasSuffix(normalized, "/v1/models") {
-		return normalized
-	}
-	if strings.HasSuffix(normalized, "/v1") {
-		return normalized + "/models"
-	}
-	return normalized + "/v1/models"
-}
-
-func setGatewayModelAuthHeaders(req *http.Request, platform, apiKey string) {
-	switch strings.ToLower(strings.TrimSpace(platform)) {
-	case "gemini":
-		req.Header.Set("x-goog-api-key", apiKey)
-	case "anthropic", "antigravity":
-		req.Header.Set("x-api-key", apiKey)
-		req.Header.Set("anthropic-version", "2023-06-01")
-		req.Header.Set("anthropic-beta", "oauth-2025-04-20")
-	default:
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-}
-
-func decodeGatewayModels(body []byte) ([]string, error) {
-	var raw any
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-	return uniqueStrings(collectGatewayModelIDs(raw)), nil
-}
-
-func collectGatewayModelIDs(raw any) []string {
-	switch value := raw.(type) {
-	case []any:
-		out := make([]string, 0, len(value))
-		for _, item := range value {
-			out = append(out, collectGatewayModelIDs(item)...)
-		}
-		return out
-	case map[string]any:
-		out := []string(nil)
-		if models, ok := value["models"]; ok {
-			if modelMap, ok := models.(map[string]any); ok {
-				for id := range modelMap {
-					out = append(out, id)
-				}
-			} else {
-				out = append(out, collectGatewayModelIDs(models)...)
-			}
-		}
-		if data, ok := value["data"]; ok {
-			out = append(out, collectGatewayModelIDs(data)...)
-		}
-		for _, key := range []string{"id", "name", "model"} {
-			if text, ok := value[key].(string); ok {
-				out = append(out, text)
-				break
-			}
-		}
-		return out
-	case string:
-		return []string{value}
-	default:
-		return nil
-	}
+	return connector.FetchModels(ctx, &http.Client{Timeout: 20 * time.Second}, baseURL, platform, apiKey)
 }
 
 func parseIntList(raw string) []int {

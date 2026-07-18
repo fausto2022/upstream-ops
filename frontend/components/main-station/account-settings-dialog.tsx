@@ -104,8 +104,8 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
             <Input id="edit-account-priority" type="number" min={1} step={1} value={priority} onChange={(event) => setPriority(Number(event.target.value))} />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="edit-account-health-model">完整检测模型（可选）</Label>
-            <Input id="edit-account-health-model" value={healthModel} onChange={(event) => setHealthModel(event.target.value)} placeholder="留空时只执行快速检测" />
+            <Label htmlFor="edit-account-health-model">账号探活模型（可选）</Label>
+            <Input id="edit-account-health-model" value={healthModel} onChange={(event) => setHealthModel(event.target.value)} placeholder="留空继承平台全局模型" />
           </div>
           <div className="flex items-center justify-between gap-4 border-t pt-4 sm:col-span-2">
             <Label htmlFor="edit-account-preferred">优先调度</Label>
