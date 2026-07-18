@@ -251,11 +251,10 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
                 value={concurrency || ""}
                 onChange={(event) => setConcurrency(Number(event.target.value))}
                 placeholder={loadingSource ? "正在读取" : "自动获取失败时手动填写"}
-                readOnly={concurrencyDetected}
                 disabled={loadingSource}
               />
               <p className={concurrencyDetected ? "text-xs text-emerald-700" : "text-xs text-muted-foreground"}>
-                {concurrencyDetected ? `已从上游账号获取：${concurrency}` : concurrencyError || "选择账号来源后自动读取"}
+                {concurrencyDetected ? "已从上游账号自动填入，可按实际情况修改" : concurrencyError || "选择账号来源后自动读取"}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

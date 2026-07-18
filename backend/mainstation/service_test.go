@@ -351,6 +351,20 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if len(admin.schedulableCalls) != 1 || !admin.schedulableCalls[0] {
 		t.Fatalf("schedulable calls = %#v", admin.schedulableCalls)
 	}
+	updated, err := service.UpdateMember(context.Background(), pool.ID, member.ID, MemberInput{
+		AccountName: member.AccountName, SourceChannelID: member.SourceChannelID, SourceGroupID: member.SourceGroupID,
+		SourceGroupName: member.SourceGroupName, Enabled: boolPtr(true), HealthEnabled: boolPtr(true),
+		HealthAPIMode: "openai_chat", Weight: 4, Priority: 5, Concurrency: 37,
+	})
+	if err != nil {
+		t.Fatalf("update managed member: %v", err)
+	}
+	if updated.Concurrency != 37 || updated.Priority != 5 || updated.Weight != 4 {
+		t.Fatalf("updated managed member = %#v", updated)
+	}
+	if len(admin.updateRequests) != 1 || admin.updateRequests[0].Concurrency != 37 || admin.updateRequests[0].Priority != 5 {
+		t.Fatalf("update requests = %#v", admin.updateRequests)
+	}
 
 	if err := service.DeleteMember(context.Background(), pool.ID, member.ID, DeleteMemberInput{Confirm: true}); err != nil {
 		t.Fatalf("delete managed member: %v", err)
@@ -358,7 +372,7 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if len(admin.deletedAccounts) != 0 || len(channels.deletedKeys) != 0 {
 		t.Fatalf("default delete removed remote resources: accounts=%v keys=%v", admin.deletedAccounts, channels.deletedKeys)
 	}
-	if len(admin.schedulableCalls) != 2 || admin.schedulableCalls[1] {
+	if len(admin.schedulableCalls) != 3 || admin.schedulableCalls[2] {
 		t.Fatalf("delete schedulable calls = %#v", admin.schedulableCalls)
 	}
 }

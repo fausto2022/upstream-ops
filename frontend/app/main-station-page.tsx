@@ -6,6 +6,7 @@ import {
   Link2,
   MoreHorizontal,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -18,6 +19,7 @@ import {
   Users,
 } from "lucide-react"
 import { toast } from "sonner"
+import { AccountSettingsDialog } from "@/components/main-station/account-settings-dialog"
 import { GroupSettingsDialog } from "@/components/main-station/group-settings-dialog"
 import { MemberDialog } from "@/components/main-station/member-dialog"
 import { StationConfigDialog } from "@/components/main-station/station-config-dialog"
@@ -86,6 +88,7 @@ export default function MainStationPage() {
   const [busyAccountID, setBusyAccountID] = useState<number | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const [memberOpen, setMemberOpen] = useState(false)
+  const [editingAccount, setEditingAccount] = useState<MainStationAccount | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const selectedWorkspace = useMemo(
@@ -444,12 +447,12 @@ export default function MainStationPage() {
                                     <IconButton label={account.schedulable ? "停用账号" : "恢复账号"} onClick={() => void handleScheduling(account)}>
                                       {account.schedulable ? <Pause className="size-4" /> : <Play className="size-4" />}
                                     </IconButton>
-                                    {selectedWorkspace ? <IconButton label="检测账号" onClick={() => void handleCheck(account)}><TestTube2 className="size-4" /></IconButton> : null}
+                                    {selectedWorkspace ? <IconButton label="编辑账号" onClick={() => setEditingAccount(account)}><Pencil className="size-4" /></IconButton> : null}
                                   </>
                                 ) : selectedWorkspace ? (
                                   <IconButton label="接管账号" onClick={() => setMemberOpen(true)}><Link2 className="size-4" /></IconButton>
                                 ) : null}
-                                <AccountMenu account={account} canManage={selectedWorkspace != null} onSync={handleSyncAccount} onDelete={handleDelete} />
+                                <AccountMenu account={account} canManage={selectedWorkspace != null} onCheck={handleCheck} onSync={handleSyncAccount} onDelete={handleDelete} />
                               </div>
                             )}
                           </TableCell>
@@ -496,6 +499,13 @@ export default function MainStationPage() {
 
       <StationConfigDialog open={configOpen} onOpenChange={setConfigOpen} config={config} onSaved={() => void loadBase()} />
       <MemberDialog open={memberOpen} onOpenChange={setMemberOpen} workspace={selectedWorkspace} channels={channels} accounts={accounts} onSaved={() => { void loadBase(); void loadAccounts(selectedGroupID) }} />
+      <AccountSettingsDialog
+        open={editingAccount != null}
+        onOpenChange={(open) => { if (!open) setEditingAccount(null) }}
+        workspace={selectedWorkspace}
+        account={editingAccount}
+        onSaved={() => { void loadBase(); void loadAccounts(selectedGroupID) }}
+      />
       <GroupSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} workspace={selectedWorkspace} onSaved={(saved) => setWorkspaces((items) => items.map((item) => item.group.id === saved.group.id ? saved : item))} />
       {confirmDialog}
     </div>
@@ -512,11 +522,12 @@ function GroupButton({ active, name, count, status, icon, onClick }: { active: b
   )
 }
 
-function AccountMenu({ account, canManage, onSync, onDelete }: { account: MainStationAccount; canManage: boolean; onSync: (account: MainStationAccount) => void; onDelete: (account: MainStationAccount) => void }) {
+function AccountMenu({ account, canManage, onCheck, onSync, onDelete }: { account: MainStationAccount; canManage: boolean; onCheck: (account: MainStationAccount) => void; onSync: (account: MainStationAccount) => void; onDelete: (account: MainStationAccount) => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="更多操作"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {account.member ? <DropdownMenuItem disabled={!canManage} onClick={() => void onCheck(account)}><TestTube2 className="size-4" />检测账号</DropdownMenuItem> : null}
         {account.member?.ownership_mode === "managed" ? <DropdownMenuItem disabled={!canManage} onClick={() => void onSync(account)}><RefreshCw className="size-4" />重新应用配置</DropdownMenuItem> : null}
         {account.member ? <DropdownMenuSeparator /> : null}
         <DropdownMenuItem className="text-destructive focus:text-destructive" disabled={!account.member || !canManage} onClick={() => void onDelete(account)}><Trash2 className="size-4" />删除账号</DropdownMenuItem>
