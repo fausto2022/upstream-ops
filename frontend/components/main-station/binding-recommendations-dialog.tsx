@@ -149,7 +149,7 @@ export function BindingRecommendationsDialog({ open, onOpenChange, workspace, on
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent className="h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:h-[90dvh] sm:max-w-5xl">
         <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-6">
           <DialogTitle>推荐绑定</DialogTitle>
           <DialogDescription>{workspace?.group.name ?? "当前分组"} · 系统只推荐，绑定前由你确认</DialogDescription>
@@ -222,7 +222,7 @@ export function BindingRecommendationsDialog({ open, onOpenChange, workspace, on
           ) : null}
         </div>
 
-        <DialogFooter className="border-t px-4 py-4 sm:px-6">
+        <DialogFooter className="border-t bg-background px-4 py-4 sm:px-6">
           <Button variant="outline" onClick={() => void load()} disabled={loading || busy}><RefreshCw className="size-4" />重新计算</Button>
           <Button onClick={() => void bindSelected()} disabled={loading || busy || selectedItems.length === 0}>
             {busy ? <Spinner /> : <Link2 className="size-4" />}确认并绑定 {selectedItems.length > 0 ? `${selectedItems.length} 个` : ""}
