@@ -257,6 +257,8 @@ func (s *Service) resolveMemberCost(member *storage.MainAccountPoolMember, polic
 		if snapshot, err := s.store.FindAccountSnapshot(*member.RemoteAccountID); err == nil {
 			if value, observed, expiresAt, ok := billingProbeRate(snapshot.BillingProbeJSON, snapshot.LastSyncAt, maxAge); ok {
 				if expiresAt == nil || now.Before(*expiresAt) {
+					ratio := s.applySourceRechargeMultiplier(member.SourceChannelID, float64(value)/float64(storage.MainStationScale))
+					value = scaleFloat(ratio)
 					return resolvedCost{Micros: value, Source: "sub2api_billing_probe", Observed: observed, ExpiresAt: expiresAt, Reliable: true}
 				}
 			}
@@ -271,7 +273,8 @@ func (s *Service) resolveMemberCost(member *storage.MainAccountPoolMember, polic
 					if member.OwnershipMode == "managed" {
 						source = "managed_binding"
 					}
-					return resolvedCost{Micros: scaleFloat(snapshot.Ratio), Source: source, Observed: snapshot.LastSeenAt, ExpiresAt: &expiresAt, Reliable: true}
+					ratio := s.applySourceRechargeMultiplier(member.SourceChannelID, snapshot.Ratio)
+					return resolvedCost{Micros: scaleFloat(ratio), Source: source, Observed: snapshot.LastSeenAt, ExpiresAt: &expiresAt, Reliable: true}
 				}
 			}
 		}

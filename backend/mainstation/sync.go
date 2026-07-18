@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bejix/upstream-ops/backend/connector"
 	"github.com/bejix/upstream-ops/backend/connector/sub2api"
 	"github.com/bejix/upstream-ops/backend/notify"
 	"github.com/bejix/upstream-ops/backend/storage"
@@ -240,7 +241,7 @@ func (s *Service) sourceGroupRate(member *storage.MainAccountPoolMember) (*float
 		return nil, nil
 	}
 	if member.SourceGroupID == nil && strings.TrimSpace(member.SourceGroupName) == "" {
-		ratio := 1.0
+		ratio := s.applySourceRechargeMultiplier(member.SourceChannelID, 1)
 		return &ratio, nil
 	}
 	snapshots, err := s.rates.ListByChannel(member.SourceChannelID)
@@ -253,12 +254,23 @@ func (s *Service) sourceGroupRate(member *storage.MainAccountPoolMember) (*float
 		matchedByName := strings.TrimSpace(member.SourceGroupName) != "" &&
 			strings.EqualFold(strings.TrimSpace(member.SourceGroupName), strings.TrimSpace(snapshots[i].ModelName))
 		if matchedByID || matchedByName {
-			ratio := snapshots[i].Ratio
+			ratio := s.applySourceRechargeMultiplier(member.SourceChannelID, snapshots[i].Ratio)
 			observedAt := snapshots[i].LastSeenAt
 			return &ratio, &observedAt
 		}
 	}
 	return nil, nil
+}
+
+func (s *Service) applySourceRechargeMultiplier(channelID uint, ratio float64) float64 {
+	if s.channels == nil {
+		return ratio
+	}
+	channelItem, err := s.channels.FindByID(channelID)
+	if err != nil {
+		return ratio
+	}
+	return connector.ApplyRechargeMultiplier(ratio, channelItem.RechargeMultiplier, channelItem.RechargeMultiplierMode)
 }
 
 func accountSnapshot(account sub2api.AdminAccount) storage.MainStationAccountSnapshot {

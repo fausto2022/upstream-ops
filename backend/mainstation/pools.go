@@ -779,7 +779,7 @@ func (s *Service) sourceRateMultiplier(ctx context.Context, member *storage.Main
 	case "divide_100":
 		ratio /= 100
 	}
-	return ratio, nil
+	return s.applySourceRechargeMultiplier(member.SourceChannelID, ratio), nil
 }
 
 func (s *Service) remoteGroupIDsForPool(poolID uint) ([]int64, error) {

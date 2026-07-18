@@ -289,6 +289,12 @@ func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
 		t.Fatalf("resolve group pool: %v", err)
 	}
 	channel := createTestChannel(t, db)
+	rechargeMultiplier := 2.0
+	channel.RechargeMultiplier = &rechargeMultiplier
+	channel.RechargeMultiplierMode = connector.RechargeMultiplierModeDivide
+	if err := db.Save(channel).Error; err != nil {
+		t.Fatalf("save recharge multiplier: %v", err)
+	}
 	remoteAccountID := int64(21)
 	sourceGroupID := int64(301)
 	member := &storage.MainAccountPoolMember{
@@ -315,7 +321,7 @@ func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
 	if err != nil || len(accounts) != 1 || accounts[0].Member == nil {
 		t.Fatalf("list group accounts: accounts=%#v err=%v", accounts, err)
 	}
-	if accounts[0].Member.SourceGroupRateMultiplier == nil || *accounts[0].Member.SourceGroupRateMultiplier != 0.15 ||
+	if accounts[0].Member.SourceGroupRateMultiplier == nil || *accounts[0].Member.SourceGroupRateMultiplier != 0.075 ||
 		accounts[0].Member.SourceGroupRateObservedAt == nil || !accounts[0].Member.SourceGroupRateObservedAt.Equal(observedAt) {
 		t.Fatalf("source group rate = %#v", accounts[0].Member)
 	}
@@ -327,7 +333,7 @@ func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
 		t.Fatalf("update source rate: %v", err)
 	}
 	accounts, err = service.ListGroupAccounts(groups[0].ID, false)
-	if err != nil || accounts[0].Member.SourceGroupRateMultiplier == nil || *accounts[0].Member.SourceGroupRateMultiplier != 0.22 {
+	if err != nil || accounts[0].Member.SourceGroupRateMultiplier == nil || *accounts[0].Member.SourceGroupRateMultiplier != 0.11 {
 		t.Fatalf("updated source group rate: accounts=%#v err=%v", accounts, err)
 	}
 }
@@ -435,6 +441,9 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	}
 	channel := createTestChannel(t, db)
 	channel.SiteURL = upstream.URL
+	rechargeMultiplier := 2.0
+	channel.RechargeMultiplier = &rechargeMultiplier
+	channel.RechargeMultiplierMode = connector.RechargeMultiplierModeDivide
 	if err := db.Save(channel).Error; err != nil {
 		t.Fatalf("update source channel: %v", err)
 	}
@@ -472,7 +481,7 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if request.Credentials["api_key"] != channels.secret || request.Credentials["base_url"] != channel.SiteURL {
 		t.Fatalf("managed account credentials = %#v", request.Credentials)
 	}
-	if len(request.GroupIDs) != 1 || request.GroupIDs[0] != 31 || request.RateMultiplier != 0.8 {
+	if len(request.GroupIDs) != 1 || request.GroupIDs[0] != 31 || request.RateMultiplier != 0.4 {
 		t.Fatalf("managed account request = %#v", request)
 	}
 	if request.Concurrency != channels.concurrency {

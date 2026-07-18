@@ -661,7 +661,23 @@ func channelRates(c *gin.Context, d *Deps) {
 		fail(c, http.StatusInternalServerError, err)
 		return
 	}
+	channelItem, err := d.Channels.FindByID(id)
+	if err != nil {
+		fail(c, http.StatusNotFound, err)
+		return
+	}
+	applyRechargeMultiplierToRates(list, channelItem)
 	c.JSON(http.StatusOK, gin.H{"data": list})
+}
+
+func applyRechargeMultiplierToRates(list []storage.RateSnapshot, channelItem *storage.Channel) {
+	if channelItem == nil {
+		return
+	}
+	for i := range list {
+		list[i].Ratio = connector.ApplyRechargeMultiplier(list[i].Ratio, channelItem.RechargeMultiplier, channelItem.RechargeMultiplierMode)
+		list[i].CompletionRatio = connector.ApplyRechargeMultiplier(list[i].CompletionRatio, channelItem.RechargeMultiplier, channelItem.RechargeMultiplierMode)
+	}
 }
 
 func balanceHistory(c *gin.Context, d *Deps) {
