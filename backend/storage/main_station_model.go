@@ -110,6 +110,7 @@ type MainAccountPoolMember struct {
 	BindingStatus            string     `gorm:"size:32;not null;index" json:"binding_status"`
 	Status                   string     `gorm:"size:32;not null;index" json:"status"`
 	Enabled                  bool       `gorm:"not null;default:true" json:"enabled"`
+	Preferred                bool       `gorm:"not null;default:false;index" json:"preferred"`
 	ProxyID                  *int64     `json:"proxy_id,omitempty"`
 	Weight                   int        `gorm:"not null;default:1" json:"weight"`
 	Priority                 int        `gorm:"not null;default:1" json:"priority"`

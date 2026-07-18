@@ -52,6 +52,7 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
   const [remoteAccountID, setRemoteAccountID] = useState(0)
   const [manualConfirmed, setManualConfirmed] = useState(false)
   const [enabled, setEnabled] = useState(true)
+  const [preferred, setPreferred] = useState(false)
   const [healthEnabled, setHealthEnabled] = useState(true)
   const [healthModel, setHealthModel] = useState("")
   const [priority, setPriority] = useState(1)
@@ -73,6 +74,7 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
     setRemoteAccountID(0)
     setManualConfirmed(false)
     setEnabled(true)
+    setPreferred(false)
     setHealthEnabled(true)
     setHealthModel("")
     setPriority(1)
@@ -156,6 +158,7 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
           remote_account_id: mode === "bound" ? remoteAccountID : undefined,
           manual_binding_confirmed: mode === "bound" ? manualConfirmed : false,
           enabled,
+          preferred,
           priority,
           concurrency,
           rate_convert_mode: "raw",
@@ -274,6 +277,10 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
               <span>我已核对账号来源与主站 Account，确认建立接管关系。</span>
             </label>
           ) : null}
+          <div className="flex items-center justify-between border-t pt-4">
+            <Label htmlFor="account-preferred">优先调度</Label>
+            <Switch id="account-preferred" checked={preferred} onCheckedChange={setPreferred} />
+          </div>
           <div className="flex items-center justify-between border-t pt-4">
             <Label htmlFor="account-enabled">添加后启用</Label>
             <Switch id="account-enabled" checked={enabled} onCheckedChange={setEnabled} />

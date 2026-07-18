@@ -211,7 +211,7 @@ func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainA
 	if err != nil {
 		return "", err
 	}
-	if newHealth == "unhealthy" && config.AutoHealthProtection && config.HealthObservedAt != nil {
+	if newHealth == "unhealthy" && (member.Preferred || (config.AutoHealthProtection && config.HealthObservedAt != nil)) {
 		_, err := s.ActivateGuardLock(ctx, *member.RemoteAccountID, "health", "member health checks reached quarantine threshold", map[string]any{
 			"pool_id": pool.ID, "member_id": member.ID, "health_check_id": check.ID,
 			"level": check.Level, "error_class": check.ErrorClass,
@@ -221,7 +221,7 @@ func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainA
 		}
 		return "health_lock_applied", nil
 	}
-	if newHealth == "healthy" && config.AutoRecovery {
+	if newHealth == "healthy" && (member.Preferred || config.AutoRecovery) {
 		_, err := s.ClearGuardLock(ctx, *member.RemoteAccountID, "health", "health")
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", nil
@@ -772,7 +772,7 @@ func (s *Service) RunDueHealthChecks(ctx context.Context) {
 		if len(tasks) >= healthSchedulerBatchLimit {
 			break
 		}
-		if !member.Enabled || !member.HealthEnabled || member.BindingStatus == "orphaned" || member.BindingStatus == "invalid" || member.Status == "disabled" {
+		if !member.HealthEnabled || member.BindingStatus == "orphaned" || member.BindingStatus == "invalid" {
 			continue
 		}
 		pool := poolCache[member.PoolID]
@@ -782,9 +782,6 @@ func (s *Service) RunDueHealthChecks(ctx context.Context) {
 				continue
 			}
 			poolCache[member.PoolID] = pool
-		}
-		if !pool.Enabled {
-			continue
 		}
 		policy := parseHealthPolicy(pool.HealthPolicyJSON)
 		for _, level := range []string{"L0", "L1", "L2"} {

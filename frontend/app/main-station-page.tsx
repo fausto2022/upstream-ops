@@ -14,6 +14,7 @@ import {
   ServerCog,
   Settings2,
   ShieldAlert,
+  Star,
   TestTube2,
   Trash2,
   Users,
@@ -427,7 +428,17 @@ export default function MainStationPage() {
                       {!accountsLoading && filteredAccounts.map((account) => (
                         <TableRow key={account.remote_account_id}>
                           <TableCell>
-                            <div className="max-w-64 truncate font-medium" title={account.name}>{account.name}</div>
+                            <div className="flex max-w-64 items-center gap-1.5">
+                              <span className="truncate font-medium" title={account.name}>{account.name}</span>
+                              {account.member?.preferred ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span aria-label="优先调度" className="shrink-0 text-amber-500"><Star className="size-3.5 fill-current" /></span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>优先调度</TooltipContent>
+                                </Tooltip>
+                              ) : null}
+                            </div>
                             <div className="text-xs text-muted-foreground">#{account.remote_account_id} · {account.platform || "未知平台"}</div>
                           </TableCell>
                           <TableCell><ScheduleBadge account={account} /></TableCell>

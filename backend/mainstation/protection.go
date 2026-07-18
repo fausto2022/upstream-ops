@@ -118,7 +118,7 @@ func (s *Service) BulkCheckPool(ctx context.Context, poolID uint, level string, 
 	var mutex sync.Mutex
 	var wait sync.WaitGroup
 	for _, member := range members {
-		if !member.Enabled || !member.HealthEnabled || member.RemoteAccountID == nil {
+		if !member.HealthEnabled || member.RemoteAccountID == nil {
 			result.Skipped++
 			continue
 		}

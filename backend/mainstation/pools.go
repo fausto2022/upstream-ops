@@ -416,6 +416,9 @@ func (s *Service) UpdateMember(ctx context.Context, poolID, memberID uint, in Me
 	if in.Enabled != nil {
 		member.Enabled = *in.Enabled
 	}
+	if in.Preferred != nil {
+		member.Preferred = *in.Preferred
+	}
 	if in.HealthEnabled != nil {
 		member.HealthEnabled = *in.HealthEnabled
 	}
@@ -840,6 +843,10 @@ func memberFromInput(poolID uint, in MemberInput) *storage.MainAccountPoolMember
 	if in.HealthEnabled != nil {
 		healthEnabled = *in.HealthEnabled
 	}
+	preferred := false
+	if in.Preferred != nil {
+		preferred = *in.Preferred
+	}
 	costAdjustment := in.CostAdjustment
 	if costAdjustment == 0 {
 		costAdjustment = 1
@@ -858,6 +865,7 @@ func memberFromInput(poolID uint, in MemberInput) *storage.MainAccountPoolMember
 		SourceAPIKeyID:         in.SourceAPIKeyID,
 		RemoteAccountID:        in.RemoteAccountID,
 		Enabled:                enabled,
+		Preferred:              preferred,
 		ProxyID:                in.ProxyID,
 		Weight:                 automaticLoadFactor(in.Concurrency),
 		Priority:               normalizeSchedulingPriority(in.Priority),

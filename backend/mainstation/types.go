@@ -74,6 +74,7 @@ type AccountMemberDTO struct {
 	BindingStatus            string     `json:"binding_status"`
 	Status                   string     `json:"status"`
 	Enabled                  bool       `json:"enabled"`
+	Preferred                bool       `json:"preferred"`
 	SourceChannelID          uint       `json:"source_channel_id"`
 	SourceGroupID            *int64     `json:"source_group_id,omitempty"`
 	SourceGroupName          string     `json:"source_group_name,omitempty"`
@@ -150,6 +151,7 @@ type MemberInput struct {
 	RemoteAccountID        *int64   `json:"remote_account_id,omitempty"`
 	ManualBindingConfirmed bool     `json:"manual_binding_confirmed"`
 	Enabled                *bool    `json:"enabled,omitempty"`
+	Preferred              *bool    `json:"preferred,omitempty"`
 	ProxyID                *int64   `json:"proxy_id,omitempty"`
 	Weight                 int      `json:"weight"`
 	Priority               int      `json:"priority"`

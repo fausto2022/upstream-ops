@@ -26,6 +26,19 @@ func TestRankSchedulingSignalsUsesHealthPriorityCostAndStability(t *testing.T) {
 	}
 }
 
+func TestRankSchedulingSignalsPrefersTaggedHealthyAccounts(t *testing.T) {
+	signals := []schedulingRankSignal{
+		{MemberID: 1, HealthBand: 0, Priority: 1, CostKnown: true, CostMicros: 100_000, SuccessBucket: 0, LatencyBucket: 0},
+		{MemberID: 2, HealthBand: 0, Preferred: true, Priority: 99, CostKnown: true, CostMicros: 9_000_000, SuccessBucket: 3, LatencyBucket: 3},
+		{MemberID: 3, HealthBand: 3, Preferred: true, Priority: 1, CostKnown: true, CostMicros: 10_000, SuccessBucket: 0, LatencyBucket: 0},
+	}
+
+	priorities := rankSchedulingSignals(signals)
+	if priorities[2] != 1 || priorities[1] != 2 || priorities[3] != 3 {
+		t.Fatalf("preferred scheduling order = %#v", priorities)
+	}
+}
+
 func TestAutomaticSchedulingDefaults(t *testing.T) {
 	if normalizeSchedulingPriority(0) != 1 || normalizeSchedulingPriority(-1) != 1 {
 		t.Fatal("invalid priority must default to 1")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -153,6 +154,83 @@ func TestImmediateCredentialFailureQuarantinesInObservationMode(t *testing.T) {
 	}
 	if result.Check.ErrorClass != "auth_invalid" || result.Member.LastHealthStatus != "unhealthy" || result.Member.Status != "quarantined" {
 		t.Fatalf("result = %#v member=%#v", result.Check, result.Member)
+	}
+}
+
+func TestPreferredMemberAutomaticallyPausesAndRecovers(t *testing.T) {
+	responseOK := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !responseOK {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "invalid token"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"effective_rate_multiplier": 0.8})
+	}))
+	defer server.Close()
+
+	service, db, admin, _ := newTestService(t)
+	member := createHealthMember(t, service, db, admin, server.URL, "")
+	member.Preferred = true
+	if err := db.Save(member).Error; err != nil {
+		t.Fatalf("mark preferred: %v", err)
+	}
+	if _, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true}); err != nil {
+		t.Fatalf("preferred failure: %v", err)
+	}
+	locks, err := service.ListGuardLocks(*member.RemoteAccountID)
+	if err != nil || len(locks) != 1 || locks[0].LockType != "health" {
+		t.Fatalf("preferred health locks = %#v, err=%v", locks, err)
+	}
+	if admin.accounts[0].Schedulable {
+		t.Fatal("preferred unhealthy account remained schedulable")
+	}
+
+	responseOK = true
+	for attempt := 1; attempt <= 3; attempt++ {
+		if _, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true}); err != nil {
+			t.Fatalf("preferred recovery attempt %d: %v", attempt, err)
+		}
+	}
+	locks, err = service.ListGuardLocks(*member.RemoteAccountID)
+	if err != nil || len(locks) != 0 {
+		t.Fatalf("preferred recovery locks = %#v, err=%v", locks, err)
+	}
+	if !admin.accounts[0].Schedulable {
+		t.Fatal("preferred recovered account did not resume scheduling")
+	}
+}
+
+func TestScheduledHealthChecksContinueForDisabledMemberUntilHealthIsDisabled(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"effective_rate_multiplier": 0.8})
+	}))
+	defer server.Close()
+
+	service, db, admin, _ := newTestService(t)
+	member := createHealthMember(t, service, db, admin, server.URL, `{"l0_interval_minutes":1,"jitter_percent":0}`)
+	member.Enabled = false
+	member.Status = "disabled"
+	member.HealthModel = ""
+	if err := db.Save(member).Error; err != nil {
+		t.Fatalf("disable member: %v", err)
+	}
+	current := member.CreatedAt.Add(2 * time.Minute)
+	service.now = func() time.Time { return current }
+	service.RunDueHealthChecks(context.Background())
+	if calls.Load() != 1 {
+		t.Fatalf("disabled member probe calls = %d, want 1", calls.Load())
+	}
+
+	if err := db.Model(member).Update("health_enabled", false).Error; err != nil {
+		t.Fatalf("disable health checks: %v", err)
+	}
+	current = current.Add(2 * time.Minute)
+	service.RunDueHealthChecks(context.Background())
+	if calls.Load() != 1 {
+		t.Fatalf("health-disabled member probe calls = %d, want 1", calls.Load())
 	}
 }
 

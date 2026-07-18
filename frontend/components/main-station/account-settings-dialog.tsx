@@ -31,6 +31,7 @@ interface Props {
 export function AccountSettingsDialog({ open, onOpenChange, workspace, account, onSaved }: Props) {
   const [concurrency, setConcurrency] = useState(1)
   const [priority, setPriority] = useState(1)
+  const [preferred, setPreferred] = useState(false)
   const [healthEnabled, setHealthEnabled] = useState(true)
   const [healthModel, setHealthModel] = useState("")
   const [enabled, setEnabled] = useState(true)
@@ -40,6 +41,7 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
     if (!open || !account?.member) return
     setConcurrency(account.member.concurrency)
     setPriority(account.member.priority > 0 ? account.member.priority : 1)
+    setPreferred(account.member.preferred)
     setHealthEnabled(account.member.health_enabled)
     setHealthModel(account.member.health_model ?? "")
     setEnabled(account.member.enabled)
@@ -66,6 +68,7 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
           source_group_id: member.source_group_id ?? null,
           source_group_name: member.source_group_name ?? "",
           enabled,
+          preferred,
           priority,
           concurrency,
           health_enabled: healthEnabled,
@@ -103,6 +106,10 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="edit-account-health-model">完整检测模型（可选）</Label>
             <Input id="edit-account-health-model" value={healthModel} onChange={(event) => setHealthModel(event.target.value)} placeholder="留空时只执行快速检测" />
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t pt-4 sm:col-span-2">
+            <Label htmlFor="edit-account-preferred">优先调度</Label>
+            <Switch id="edit-account-preferred" checked={preferred} onCheckedChange={setPreferred} />
           </div>
           <div className="flex items-center justify-between gap-4 border-t pt-4 sm:col-span-2">
             <Label htmlFor="edit-account-health-enabled">启用健康检测</Label>

@@ -15,6 +15,7 @@ import (
 type schedulingRankSignal struct {
 	MemberID      uint
 	HealthBand    int
+	Preferred     bool
 	Priority      int
 	CostKnown     bool
 	CostMicros    int64
@@ -57,6 +58,7 @@ func (s *Service) poolSchedulingPriorities(poolID uint) (map[uint]int, error) {
 		signals = append(signals, schedulingRankSignal{
 			MemberID:      member.ID,
 			HealthBand:    schedulingHealthBand(member),
+			Preferred:     member.Preferred,
 			Priority:      normalizeSchedulingPriority(member.Priority),
 			CostKnown:     costKnown,
 			CostMicros:    costMicros,
@@ -73,6 +75,8 @@ func rankSchedulingSignals(signals []schedulingRankSignal) map[uint]int {
 		switch {
 		case left.HealthBand != right.HealthBand:
 			return left.HealthBand < right.HealthBand
+		case left.Preferred != right.Preferred:
+			return left.Preferred
 		case left.Priority != right.Priority:
 			return left.Priority < right.Priority
 		case left.CostKnown != right.CostKnown:
@@ -103,6 +107,7 @@ func rankSchedulingSignals(signals []schedulingRankSignal) map[uint]int {
 
 func sameSchedulingRank(left, right schedulingRankSignal) bool {
 	return left.HealthBand == right.HealthBand &&
+		left.Preferred == right.Preferred &&
 		left.Priority == right.Priority &&
 		left.CostKnown == right.CostKnown &&
 		(!left.CostKnown || left.CostMicros == right.CostMicros) &&

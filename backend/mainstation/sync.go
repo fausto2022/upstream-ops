@@ -208,6 +208,7 @@ func (s *Service) accountDTO(item storage.MainStationAccountSnapshot) AccountDTO
 			BindingStatus:            member.BindingStatus,
 			Status:                   member.Status,
 			Enabled:                  member.Enabled,
+			Preferred:                member.Preferred,
 			SourceChannelID:          member.SourceChannelID,
 			SourceGroupID:            member.SourceGroupID,
 			SourceGroupName:          member.SourceGroupName,

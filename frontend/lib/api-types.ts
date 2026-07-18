@@ -663,6 +663,7 @@ export interface MainStationAccountMember {
   binding_status: "pending" | "verified" | "manual_confirmed" | "invalid" | "orphaned"
   status: "pending" | "active" | "degraded" | "quarantined" | "disabled" | "orphaned" | "error"
   enabled: boolean
+  preferred: boolean
   source_channel_id: number
   source_group_id?: number | null
   source_group_name?: string
@@ -707,6 +708,7 @@ export interface MainStationMember {
   binding_status: "pending" | "verified" | "manual_confirmed" | "invalid" | "orphaned"
   status: "pending" | "active" | "degraded" | "quarantined" | "disabled" | "orphaned" | "error"
   enabled: boolean
+  preferred: boolean
   proxy_id?: number | null
   weight: number
   priority: number
