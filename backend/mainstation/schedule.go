@@ -91,6 +91,9 @@ func (s *Service) ClearGuardLock(ctx context.Context, remoteAccountID int64, loc
 		return nil, err
 	}
 	cleared, err := s.store.ClearGuardLock(remoteAccountID, lockType, clearedBy)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return s.ReconcileAccount(ctx, remoteAccountID, clearedBy)
+	}
 	if err != nil {
 		return nil, err
 	}

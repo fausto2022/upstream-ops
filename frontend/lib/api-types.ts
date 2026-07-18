@@ -861,6 +861,15 @@ export interface MainStationGuardLock {
   cleared_by?: string
 }
 
+export interface MainStationSchedulingDecision {
+  remote_account_id: number
+  desired_schedulable: boolean
+  remote_schedulable: boolean
+  changed: boolean
+  reason: string
+  locks: MainStationGuardLock[]
+}
+
 export interface MainStationPoolEvaluation {
   pool_id: number
   checks: MainStationProfitCheck[]

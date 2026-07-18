@@ -53,6 +53,13 @@ func TestProfitProtectionUsesFixedPointAndKeepsLocksIndependent(t *testing.T) {
 	if len(admin.schedulableCalls) != 1 || admin.schedulableCalls[0] {
 		t.Fatalf("margin schedulable calls = %#v", admin.schedulableCalls)
 	}
+	decision, err := service.ClearGuardLock(context.Background(), *member.RemoteAccountID, "manual", "admin")
+	if err != nil {
+		t.Fatalf("clear missing manual lock: %v", err)
+	}
+	if decision.DesiredSchedulable || decision.RemoteSchedulable || len(decision.Locks) != 1 || decision.Locks[0].LockType != "margin" {
+		t.Fatalf("decision after clearing missing manual lock = %#v", decision)
+	}
 
 	if _, err := service.ActivateGuardLock(context.Background(), *member.RemoteAccountID, "manual", "maintenance", nil, "admin"); err != nil {
 		t.Fatalf("activate manual lock: %v", err)

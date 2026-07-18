@@ -67,6 +67,7 @@ import type {
   MainStationPage,
   MainStationPoolEvaluation,
   MainStationProtectionPreview,
+  MainStationSchedulingDecision,
   MainStationSyncResult,
 } from "@/lib/api-types"
 import { relativeTime } from "@/lib/format"
@@ -249,8 +250,9 @@ export default function MainStationPage() {
         })
         toast.success("账号已停用")
       } else {
-        await apiFetch(`/main-station/accounts/${account.remote_account_id}/locks/manual/clear`, { method: "POST" })
-        toast.success("已尝试恢复账号调度")
+        const decision = await apiFetch<MainStationSchedulingDecision>(`/main-station/accounts/${account.remote_account_id}/locks/manual/clear`, { method: "POST" })
+        if (decision.remote_schedulable) toast.success("账号已恢复调度")
+        else toast.warning(schedulingBlockedMessage(decision))
       }
       await loadAccounts(selectedGroupID)
       await loadRisk(selectedGroupID)
@@ -626,6 +628,28 @@ function SourceGroupRate({ account }: { account: MainStationAccount }) {
 function formatMainStationMultiplier(value: number) {
   if (!Number.isFinite(value)) return "-"
   return (value / 1_000_000).toFixed(2)
+}
+
+function schedulingBlockedMessage(decision: MainStationSchedulingDecision) {
+  if (decision.locks.length > 0) {
+    const labels: Record<string, string> = {
+      manual: "人工停用",
+      health: "健康异常保护",
+      margin: "利润保护",
+      sync: "同步保护",
+      credential: "凭据异常保护",
+      binding: "绑定异常保护",
+    }
+    return `账号仍被${decision.locks.map((lock) => labels[lock.lock_type] || lock.lock_type).join("、")}停用`
+  }
+  const reasons: Record<string, string> = {
+    "main station management is disabled": "主站管理已停用，账号暂时无法恢复",
+    "account pool is disabled": "当前主站分组已停用，账号暂时无法恢复",
+    "pool member is disabled": "当前账号已关闭，需先在账号设置中启用",
+    "remote account status is not active": "主站 Account 状态不是活动状态",
+    "member binding is invalid": "账号绑定关系无效，暂时无法恢复",
+  }
+  return reasons[decision.reason] || "账号当前仍不满足调度条件"
 }
 
 function ToggleLine({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
