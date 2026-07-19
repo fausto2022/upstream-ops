@@ -593,6 +593,72 @@ func TestEnsureManagedSourceAPIKeyRecreatesMissingRemoteKey(t *testing.T) {
 	}
 }
 
+func TestSyncMemberRecreatesMissingManagedRemoteAccount(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/sub2api/billing":
+			_ = json.NewEncoder(w).Encode(map[string]any{"effective_rate_multiplier": 0.8})
+		case "/v1/chat/completions":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []map[string]any{{"message": map[string]any{"content": "OK"}}},
+				"usage":   map[string]any{"total_tokens": 4},
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+
+	service, db, admin, channels := newTestService(t)
+	configureTestStation(t, service)
+	admin.groups = []sub2api.AdminGroup{{ID: 31, Name: "main-group", RateMultiplier: 1, Status: "active"}}
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	channel := createTestChannel(t, db)
+	channel.SiteURL = upstream.URL
+	if err := db.Save(channel).Error; err != nil {
+		t.Fatalf("update source channel: %v", err)
+	}
+	sourceGroupID := int64(5)
+	channels.groups = []connector.APIKeyGroup{{ID: &sourceGroupID, Name: "source-group", Ratio: 0.8}}
+	groups, err := service.ListGroups(false)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups = %#v, err=%v", groups, err)
+	}
+	pool, err := service.CreatePool(PoolInput{
+		Name: "managed-pool", Platform: "openai", TargetGroupIDs: []uint{groups[0].ID},
+	})
+	if err != nil {
+		t.Fatalf("create pool: %v", err)
+	}
+	member, err := service.CreateMember(context.Background(), pool.ID, MemberInput{
+		AccountName: "OpenAI-01", OwnershipMode: "managed", SourceChannelID: channel.ID,
+		SourceGroupID: &sourceGroupID, SourceGroupName: "source-group", Enabled: boolPtr(true),
+		HealthEnabled: boolPtr(true), HealthAPIMode: "openai_chat", Priority: 1, CostAdjustment: 1,
+	})
+	if err != nil || member.RemoteAccountID == nil {
+		t.Fatalf("create managed member: member=%#v err=%v", member, err)
+	}
+	oldRemoteAccountID := *member.RemoteAccountID
+	admin.accounts = nil
+
+	recreated, err := service.SyncMember(context.Background(), pool.ID, member.ID)
+	if err != nil {
+		t.Fatalf("recreate missing managed account: %v", err)
+	}
+	if recreated.RemoteAccountID == nil || *recreated.RemoteAccountID == oldRemoteAccountID {
+		t.Fatalf("recreated member = %#v", recreated)
+	}
+	if len(admin.createRequests) != 2 {
+		t.Fatalf("create requests = %#v", admin.createRequests)
+	}
+	request := admin.createRequests[1]
+	if request.Credentials["pool_mode"] != true || request.Credentials["pool_mode_retry_count"] != managedAccountPoolModeRetryCount {
+		t.Fatalf("recreated account pool mode = %#v", request.Credentials)
+	}
+}
+
 func TestUpdateBoundMemberEnabledReconcilesRemoteScheduling(t *testing.T) {
 	service, _, admin, pool, member := createBoundSchedulingMember(t)
 	admin.schedulableCalls = nil

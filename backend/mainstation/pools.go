@@ -688,12 +688,15 @@ func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*stora
 	var remote *sub2api.AdminAccount
 	if member.RemoteAccountID != nil {
 		remote, err = client.UpdateAccount(ctx, adminTarget, *member.RemoteAccountID, request)
-		if err != nil {
+		if err != nil && missingRemoteResource(err) {
+			member.RemoteAccountID = nil
+		} else if err != nil {
 			if current, getErr := client.GetAccount(ctx, adminTarget, *member.RemoteAccountID); getErr == nil {
 				remote = current
 			}
 		}
-	} else {
+	}
+	if member.RemoteAccountID == nil {
 		existing, findErr := client.FindAccountByName(ctx, adminTarget, accountName)
 		if findErr != nil {
 			return nil, s.failManagedMember(member, findErr)
