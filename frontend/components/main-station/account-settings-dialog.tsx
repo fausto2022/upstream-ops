@@ -94,6 +94,7 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
       toast.error("账号失败和恢复次数必须在 1 到 100 之间")
       return
     }
+    const priorityChanged = priority !== member.priority
     setBusy(true)
     try {
       const saved = await apiFetch<MainStationMember>(`/main-station/groups/${workspace.group.id}/accounts/${member.id}`, {
@@ -118,6 +119,7 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
       onSaved(saved)
       onOpenChange(false)
       if (saved.scheduling_dirty_at) toast.warning("账号设置已保存，启停状态将在后台自动重试同步")
+      else if (priorityChanged) toast.success("基础优先级已保存，实际优先级将在下次重排后更新")
       else toast.success("账号设置已保存并应用")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存账号设置失败")
@@ -130,6 +132,7 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
   const globalModel = config?.health_models?.[platform] ?? ""
   const catalog = modelCatalogs.find((item) => item.platform === platform)
   const modelOptions = Array.from(new Set([...(catalog?.models ?? []), healthModel].filter(Boolean)))
+  const actualPriority = account?.priority
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,8 +148,16 @@ export function AccountSettingsDialog({ open, onOpenChange, workspace, account, 
             <Input id="edit-account-concurrency" type="number" min={1} value={concurrency} onChange={(event) => setConcurrency(Number(event.target.value))} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="edit-account-priority">优先级</Label>
+            <Label>当前实际优先级</Label>
+            <div className="flex h-9 items-center rounded-md border border-input bg-muted/30 px-3 text-sm font-medium tabular-nums">
+              {actualPriority != null && actualPriority > 0 ? actualPriority : "-"}
+            </div>
+            <p className="text-xs text-muted-foreground">由最近一次自动重排生成</p>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="edit-account-priority">基础优先级</Label>
             <Input id="edit-account-priority" type="number" min={1} step={1} value={priority} onChange={(event) => setPriority(Number(event.target.value))} />
+            <p className="text-xs text-muted-foreground">保存的是重排基准值；实际优先级会按标签、健康、延迟和成本自动调整。</p>
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>账号探活模型</Label>

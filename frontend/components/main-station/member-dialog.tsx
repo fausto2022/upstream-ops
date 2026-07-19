@@ -325,7 +325,7 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="account-priority">优先级</Label>
+                <Label htmlFor="account-priority">基础优先级</Label>
                 <Input id="account-priority" type="number" min={1} step={1} value={priority} onChange={(event) => setPriority(Number(event.target.value))} />
                 <p className="text-xs text-muted-foreground">首次创建使用该值；后续定时重排会按标签、健康、延迟和成本调整实际优先级。</p>
               </div>
