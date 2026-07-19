@@ -18,6 +18,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Star,
   Tags,
   Trash2,
   Gift,
@@ -822,6 +823,34 @@ export function ChannelCards() {
                       ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      <Tooltip delayDuration={150}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className={cn(
+                              "size-7",
+                              c.starred
+                                ? "text-amber-500 hover:text-amber-600"
+                                : "text-muted-foreground hover:text-amber-500",
+                            )}
+                            disabled={busyAction === `star-${c.id}`}
+                            aria-label={c.starred ? `取消 ${c.name} 的星标` : `将 ${c.name} 标为星标`}
+                            onClick={() => void withBusy(`star-${c.id}`, async () => {
+                              await apiFetch(`/channels/${c.id}`, {
+                                method: "PUT",
+                                body: JSON.stringify({ starred: !c.starred }),
+                              })
+                              if (!c.starred) setPage(1)
+                            })}
+                          >
+                            <Star className={cn("size-3.5", c.starred && "fill-current")} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          {c.starred ? "取消星标" : "标为星标"}
+                        </TooltipContent>
+                      </Tooltip>
                       <div className="text-right text-[10px] leading-4 text-muted-foreground">
                         <p>{relativeTime(c.last_balance_at ?? c.updated_at)}</p>
                       </div>

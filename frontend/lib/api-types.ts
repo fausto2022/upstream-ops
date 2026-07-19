@@ -60,6 +60,7 @@ export interface Channel {
   site_url: string
   username: string
   sort_order: number
+  starred: boolean
   user_id?: string
   credential_mode: CredentialMode
   login_extra_params: string

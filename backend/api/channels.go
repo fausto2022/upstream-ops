@@ -56,6 +56,7 @@ type channelInput struct {
 	SiteURL                string                 `json:"site_url" binding:"required"`
 	Username               string                 `json:"username"`
 	SortOrder              int                    `json:"sort_order"`
+	Starred                bool                   `json:"starred"`
 	Password               string                 `json:"password"`
 	CredentialMode         storage.CredentialMode `json:"credential_mode"`
 	TokenCredential        string                 `json:"token_credential"` // JSON：token 模式时填写
@@ -76,6 +77,7 @@ type channelUpdateInput struct {
 	SiteURL                *string                 `json:"site_url"`
 	Username               *string                 `json:"username"`
 	SortOrder              *int                    `json:"sort_order"`
+	Starred                *bool                   `json:"starred"`
 	Password               *string                 `json:"password"`
 	CredentialMode         *storage.CredentialMode `json:"credential_mode"`
 	TokenCredential        *string                 `json:"token_credential"`
@@ -161,6 +163,7 @@ func createChannel(c *gin.Context, d *Deps) {
 		SiteURL:                in.SiteURL,
 		Username:               in.Username,
 		SortOrder:              in.SortOrder,
+		Starred:                in.Starred,
 		Password:               in.Password,
 		CredentialMode:         in.CredentialMode,
 		TokenCredential:        in.TokenCredential,
@@ -260,6 +263,7 @@ func updateChannel(c *gin.Context, d *Deps) {
 		SiteURL:                in.SiteURL,
 		Username:               in.Username,
 		SortOrder:              in.SortOrder,
+		Starred:                in.Starred,
 		Password:               in.Password,
 		CredentialMode:         in.CredentialMode,
 		TokenCredential:        in.TokenCredential,

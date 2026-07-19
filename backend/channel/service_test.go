@@ -103,6 +103,29 @@ func TestResolveAppliesProxyOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestUpdateChannelStarredOnly(t *testing.T) {
+	svc, cipher := testService(t)
+	encrypted, err := cipher.Encrypt("password")
+	if err != nil {
+		t.Fatalf("encrypt password: %v", err)
+	}
+	item := &storage.Channel{
+		Name: "source", Type: storage.ChannelTypeSub2API, SiteURL: "https://example.com", Username: "user",
+		PasswordCipher: encrypted, CredentialMode: storage.CredentialModePassword, MonitorEnabled: true,
+	}
+	if err := svc.Channels.Create(item); err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	starred := true
+	updated, err := svc.Update(item.ID, UpdateInput{Starred: &starred})
+	if err != nil {
+		t.Fatalf("update channel star: %v", err)
+	}
+	if !updated.Starred || updated.Name != item.Name || updated.SiteURL != item.SiteURL {
+		t.Fatalf("updated channel = %#v", updated)
+	}
+}
+
 func TestResolveSkipsProxyWhenGlobalProxyDisabled(t *testing.T) {
 	svc, cipher := testService(t)
 	svc.UpdateProxyConfig(config.ProxyConfig{

@@ -79,7 +79,7 @@ func (r *Channels) FindByID(id uint) (*Channel, error) {
 }
 func (r *Channels) List() ([]Channel, error) {
 	var list []Channel
-	if err := r.db.Order("sort_order DESC").Order("id ASC").Find(&list).Error; err != nil {
+	if err := orderChannelCards(r.db).Find(&list).Error; err != nil {
 		return nil, err
 	}
 	return list, nil
@@ -96,7 +96,7 @@ func (r *Channels) ListPage(page, pageSize int) ([]Channel, int64, error) {
 		return nil, 0, err
 	}
 	var list []Channel
-	q := r.db.Order("sort_order DESC").Order("id ASC")
+	q := orderChannelCards(r.db)
 	if pageSize != -1 {
 		q = q.Offset((page - 1) * pageSize).Limit(pageSize)
 	}
@@ -105,6 +105,11 @@ func (r *Channels) ListPage(page, pageSize int) ([]Channel, int64, error) {
 	}
 	return list, total, nil
 }
+
+func orderChannelCards(db *gorm.DB) *gorm.DB {
+	return db.Order("starred DESC").Order("COALESCE(today_cost, 0) DESC").Order("sort_order DESC").Order("id ASC")
+}
+
 func (r *Channels) ListMonitorEnabled() ([]Channel, error) {
 	var list []Channel
 	if err := r.db.Where("monitor_enabled = ?", true).Order("sort_order DESC").Order("id ASC").Find(&list).Error; err != nil {

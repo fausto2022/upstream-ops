@@ -395,8 +395,10 @@ func TestChannelsListSortOrder(t *testing.T) {
 	db := openTestDB(t)
 	channels := storage.NewChannels(db)
 	items := []storage.Channel{
-		{Name: "low", Type: storage.ChannelTypeNewAPI, SiteURL: "https://a.example.com", Username: "u", PasswordCipher: "x", SortOrder: 1, MonitorEnabled: true},
-		{Name: "high", Type: storage.ChannelTypeNewAPI, SiteURL: "https://b.example.com", Username: "u", PasswordCipher: "x", SortOrder: 9, MonitorEnabled: true},
+		{Name: "unstarred-high-cost", Type: storage.ChannelTypeNewAPI, SiteURL: "https://a.example.com", Username: "u", PasswordCipher: "x", SortOrder: 1, TodayCost: testFloat64Ptr(100), MonitorEnabled: true},
+		{Name: "unstarred-low-cost", Type: storage.ChannelTypeNewAPI, SiteURL: "https://b.example.com", Username: "u", PasswordCipher: "x", SortOrder: 9, TodayCost: testFloat64Ptr(10), MonitorEnabled: true},
+		{Name: "starred-low-cost", Type: storage.ChannelTypeNewAPI, SiteURL: "https://c.example.com", Username: "u", PasswordCipher: "x", SortOrder: 1, Starred: true, TodayCost: testFloat64Ptr(1), MonitorEnabled: true},
+		{Name: "starred-high-cost", Type: storage.ChannelTypeNewAPI, SiteURL: "https://d.example.com", Username: "u", PasswordCipher: "x", SortOrder: 1, Starred: true, TodayCost: testFloat64Ptr(20), MonitorEnabled: true},
 	}
 	for i := range items {
 		if err := channels.Create(&items[i]); err != nil {
@@ -420,10 +422,13 @@ func TestChannelsListSortOrder(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(resp.Data) != 2 || resp.Data[0].Name != "high" || resp.Data[1].Name != "low" {
+	if len(resp.Data) != 4 || resp.Data[0].Name != "starred-high-cost" || resp.Data[1].Name != "starred-low-cost" ||
+		resp.Data[2].Name != "unstarred-high-cost" || resp.Data[3].Name != "unstarred-low-cost" {
 		t.Fatalf("unexpected order: %#v", resp.Data)
 	}
 }
+
+func testFloat64Ptr(value float64) *float64 { return &value }
 
 func TestChannelsListIncludesNewAPIUserID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
