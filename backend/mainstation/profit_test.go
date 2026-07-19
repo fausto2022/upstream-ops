@@ -128,6 +128,25 @@ func TestProfitEvaluationTreatsMinimumPositiveMarginAsHealthy(t *testing.T) {
 	}
 }
 
+func TestUnsupportedPricingAllowsStandardUsageGroups(t *testing.T) {
+	for _, subscriptionType := range []string{"", "standard", "usage", "token", "payg"} {
+		group := &storage.UpstreamSyncTargetGroup{SubscriptionType: subscriptionType}
+		if unsupportedPricing(group) {
+			t.Fatalf("subscription type %q should support profit evaluation", subscriptionType)
+		}
+	}
+	for _, subscriptionType := range []string{"subscription", "monthly", "quota"} {
+		group := &storage.UpstreamSyncTargetGroup{SubscriptionType: subscriptionType}
+		if !unsupportedPricing(group) {
+			t.Fatalf("subscription type %q should not support profit evaluation", subscriptionType)
+		}
+	}
+	if !unsupportedPricing(&storage.UpstreamSyncTargetGroup{ImageSeparateRate: true}) ||
+		!unsupportedPricing(&storage.UpstreamSyncTargetGroup{VideoSeparateRate: true}) {
+		t.Fatal("separate image or video pricing should not support automatic profit evaluation")
+	}
+}
+
 func TestProfitEvaluationDoesNotProtectExpiredOrUnsupportedPricing(t *testing.T) {
 	service, db, admin, _ := newTestService(t)
 	current := time.Date(2026, 7, 17, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))

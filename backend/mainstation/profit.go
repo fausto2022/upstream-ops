@@ -409,7 +409,7 @@ func unsupportedPricing(group *storage.UpstreamSyncTargetGroup) bool {
 		return true
 	}
 	typeName := strings.ToLower(strings.TrimSpace(group.SubscriptionType))
-	return typeName != "" && typeName != "usage" && typeName != "token" && typeName != "payg"
+	return typeName != "" && typeName != "standard" && typeName != "usage" && typeName != "token" && typeName != "payg"
 }
 
 func selectSourceRateSnapshot(items []storage.RateSnapshot, member *storage.MainAccountPoolMember) *storage.RateSnapshot {
