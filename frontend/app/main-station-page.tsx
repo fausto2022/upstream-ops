@@ -47,6 +47,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
@@ -56,7 +63,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { apiFetch } from "@/lib/api"
 import type {
@@ -99,6 +105,10 @@ export default function MainStationPage() {
   const [editingAccount, setEditingAccount] = useState<MainStationAccount | null>(null)
   const [healthHistoryAccount, setHealthHistoryAccount] = useState<MainStationAccount | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [riskOpen, setRiskOpen] = useState(false)
+  const [auditOpen, setAuditOpen] = useState(false)
+  const [auditSearch, setAuditSearch] = useState("")
+  const [auditResult, setAuditResult] = useState("all")
 
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.group.id === selectedGroupID) ?? null,
@@ -198,6 +208,44 @@ export default function MainStationPage() {
     if (priorityDiff !== 0) return priorityDiff
     return left.name.localeCompare(right.name)
   }), [filteredAccounts])
+
+  const selectedMemberIDs = useMemo(
+    () => new Set(accounts.flatMap((account) => account.member ? [account.member.id] : [])),
+    [accounts],
+  )
+  const visibleActiveLocks = useMemo(
+    () => (preview?.active_locks ?? []).filter((lock) => selectedGroupID == null || selectedMemberIDs.has(lock.member_id)),
+    [preview?.active_locks, selectedGroupID, selectedMemberIDs],
+  )
+  const visibleUnhealthyMemberIDs = useMemo(
+    () => (preview?.unhealthy_member_ids ?? []).filter((memberID) => selectedGroupID == null || selectedMemberIDs.has(memberID)),
+    [preview?.unhealthy_member_ids, selectedGroupID, selectedMemberIDs],
+  )
+  const visibleMarginRiskMemberIDs = useMemo(
+    () => (preview?.margin_risk_member_ids ?? []).filter((memberID) => selectedGroupID == null || selectedMemberIDs.has(memberID)),
+    [preview?.margin_risk_member_ids, selectedGroupID, selectedMemberIDs],
+  )
+  const riskCount = useMemo(() => new Set([
+    ...visibleActiveLocks.map((lock) => lock.member_id),
+    ...visibleUnhealthyMemberIDs,
+    ...visibleMarginRiskMemberIDs,
+  ]).size, [visibleActiveLocks, visibleMarginRiskMemberIDs, visibleUnhealthyMemberIDs])
+  const riskAuditLogs = useMemo(
+    () => auditLogs.filter((item) => !item.success || item.action.includes("lock") || item.action.includes("evaluate")),
+    [auditLogs],
+  )
+  const filteredAuditLogs = useMemo(() => {
+    const keyword = auditSearch.trim().toLowerCase()
+    return auditLogs.filter((item) => {
+      if (auditResult === "success" && !item.success) return false
+      if (auditResult === "failure" && item.success) return false
+      if (!keyword) return true
+      const accountName = item.remote_account_id
+        ? accounts.find((account) => account.remote_account_id === item.remote_account_id)?.name ?? ""
+        : ""
+      return `${actionLabel(item.action)} ${item.action} ${accountName} ${item.remote_account_id ?? ""} ${auditDetail(item.error_message || item.detail)}`.toLowerCase().includes(keyword)
+    })
+  }, [accounts, auditLogs, auditResult, auditSearch])
 
   async function handleSync() {
     setSyncing(true)
@@ -360,7 +408,18 @@ export default function MainStationPage() {
             {config?.configured ? `${config.name} · ${config.base_url}` : "尚未配置 Sub2API 主站"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {config?.configured ? (
+            <Button variant="outline" onClick={() => { setRiskOpen(true); void loadRisk(selectedGroupID) }}>
+              <ShieldAlert className="size-4" />风险中心
+              {riskCount > 0 ? <Badge variant="destructive" className="ml-1 min-w-5 justify-center px-1.5 tabular-nums">{riskCount}</Badge> : null}
+            </Button>
+          ) : null}
+          {config?.configured ? (
+            <Button variant="outline" onClick={() => { setAuditOpen(true); void loadRisk(selectedGroupID) }}>
+              <History className="size-4" />操作记录
+            </Button>
+          ) : null}
           {config?.configured ? (
             <Button variant="outline" onClick={() => void handleSync()} disabled={syncing}>
               <RefreshCw className={cn("size-4", syncing && "animate-spin")} />{syncing ? "同步中" : "同步主站"}
@@ -379,15 +438,7 @@ export default function MainStationPage() {
           <Button onClick={() => setConfigOpen(true)}>配置主站</Button>
         </div>
       ) : (
-        <Tabs defaultValue="accounts" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="accounts"><Users className="size-4" />账号管理</TabsTrigger>
-            <TabsTrigger value="risk"><ShieldAlert className="size-4" />风险保护</TabsTrigger>
-            <TabsTrigger value="logs"><History className="size-4" />操作记录</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="accounts" className="mt-0">
-            <div className="grid min-h-[560px] overflow-hidden border md:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="grid min-h-[560px] overflow-hidden border md:grid-cols-[240px_minmax(0,1fr)]">
               <aside className="border-b bg-muted/20 md:border-b-0 md:border-r">
                 <div className="border-b px-3 py-3">
                   <p className="text-sm font-medium">主站分组</p>
@@ -512,33 +563,87 @@ export default function MainStationPage() {
                   </Table>
                 </div>
               </section>
-            </div>
-          </TabsContent>
+        </div>
+      )}
 
-          <TabsContent value="risk" className="mt-0 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Metric label="当前分组" value={selectedWorkspace?.group.name ?? "全部"} />
-              <Metric label="活动停用原因" value={preview?.active_locks.length ?? 0} danger={(preview?.active_locks.length ?? 0) > 0} />
-              <Metric label="利润风险账号" value={preview?.margin_risk_member_ids.length ?? 0} danger={(preview?.margin_risk_member_ids.length ?? 0) > 0} />
+      <Sheet open={riskOpen} onOpenChange={setRiskOpen}>
+        <SheetContent className="w-full gap-0 p-0 sm:max-w-xl">
+          <SheetHeader className="border-b pr-12">
+            <div className="flex items-center gap-2">
+              <SheetTitle>风险中心</SheetTitle>
+              {riskCount > 0 ? <Badge variant="destructive">{riskCount}</Badge> : <Badge variant="outline">正常</Badge>}
             </div>
-            <div className="border-y py-4">
-              <div className="space-y-3">
-                <p className="text-sm font-semibold">分组操作</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" disabled={!selectedWorkspace} onClick={() => void handleEvaluate()}><CircleDollarSign className="size-4" />成本与利润评估</Button>
-                  <Button variant="outline" disabled={!selectedWorkspace} onClick={() => void handleBulkCheck()}><Activity className="size-4" />检测全部账号</Button>
-                  <Button variant="outline" disabled={!selectedWorkspace} onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" />分组策略</Button>
-                </div>
+            <SheetDescription>{selectedWorkspace?.group.name ?? "全部分组"}</SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid gap-4 p-4 sm:grid-cols-3">
+              <Metric label="健康异常" value={visibleUnhealthyMemberIDs.length} danger={visibleUnhealthyMemberIDs.length > 0} />
+              <Metric label="利润风险" value={visibleMarginRiskMemberIDs.length} danger={visibleMarginRiskMemberIDs.length > 0} />
+              <Metric label="活动停用原因" value={visibleActiveLocks.length} danger={visibleActiveLocks.length > 0} />
+            </div>
+
+            <div className="border-y p-4">
+              <p className="mb-3 text-sm font-semibold">分组操作</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" disabled={!selectedWorkspace} onClick={() => void handleEvaluate()}><CircleDollarSign className="size-4" />成本与利润评估</Button>
+                <Button variant="outline" disabled={!selectedWorkspace} onClick={() => void handleBulkCheck()}><Activity className="size-4" />检测全部账号</Button>
+                <Button variant="outline" disabled={!selectedWorkspace} onClick={() => { setRiskOpen(false); setSettingsOpen(true) }}><Settings2 className="size-4" />分组策略</Button>
               </div>
             </div>
-            <AuditTable items={auditLogs.filter((item) => !item.success || item.action.includes("lock") || item.action.includes("evaluate"))} accounts={accounts} empty="暂无风险事件" />
-          </TabsContent>
 
-          <TabsContent value="logs" className="mt-0">
-            <AuditTable items={auditLogs} accounts={accounts} empty="暂无操作记录" />
-          </TabsContent>
-        </Tabs>
-      )}
+            <section className="border-b p-4">
+              <p className="mb-3 text-sm font-semibold">当前停用保护</p>
+              {visibleActiveLocks.length > 0 ? (
+                <div className="divide-y">
+                  {visibleActiveLocks.map((lock) => (
+                    <div key={lock.id} className="space-y-1 py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-sm font-medium">{accountDisplayName(accounts, lock.remote_account_id)} <span className="text-muted-foreground">#{lock.remote_account_id}</span></p>
+                        <Badge variant="outline" className="shrink-0">{guardLockLabel(lock.lock_type)}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{guardLockReason(lock.reason)}</p>
+                      <p className="text-xs text-muted-foreground">{relativeTime(lock.created_at)} · {sourceLabel(lock.created_by)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="py-4 text-center text-sm text-muted-foreground">当前没有活动停用保护</p>}
+            </section>
+
+            <section className="p-4">
+              <p className="mb-3 text-sm font-semibold">最近风险事件</p>
+              <AuditEventList items={riskAuditLogs} accounts={accounts} empty="暂无风险事件" />
+            </section>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={auditOpen} onOpenChange={setAuditOpen}>
+        <SheetContent className="w-full gap-0 p-0 sm:max-w-5xl">
+          <SheetHeader className="border-b pr-12">
+            <SheetTitle>操作记录</SheetTitle>
+            <SheetDescription>{selectedWorkspace?.group.name ?? "全部分组"} · 最近 50 条</SheetDescription>
+          </SheetHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex flex-wrap gap-2 border-b p-4">
+              <div className="relative min-w-52 flex-1">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={auditSearch} onChange={(event) => setAuditSearch(event.target.value)} placeholder="搜索账号、操作或详情" className="pl-9" />
+              </div>
+              <Select value={auditResult} onValueChange={setAuditResult}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部结果</SelectItem>
+                  <SelectItem value="success">成功</SelectItem>
+                  <SelectItem value="failure">失败</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <AuditTable items={filteredAuditLogs} accounts={accounts} empty="暂无操作记录" />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <StationConfigDialog open={configOpen} onOpenChange={setConfigOpen} config={config} onSaved={() => { void loadBase(); void loadAccounts(selectedGroupID); void loadRisk(selectedGroupID) }} />
       <MemberDialog
@@ -692,6 +797,29 @@ function schedulingBlockedMessage(decision: MainStationSchedulingDecision) {
   return reasons[decision.reason] || "账号当前仍不满足调度条件"
 }
 
+function AuditEventList({ items, accounts, empty }: { items: MainStationAuditLog[]; accounts: MainStationAccount[]; empty: string }) {
+  if (items.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>
+  return (
+    <div className="divide-y">
+      {items.map((item) => (
+        <div key={item.id} className="space-y-1.5 py-3 first:pt-0 last:pb-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{actionLabel(item.action)}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {item.remote_account_id ? `${accountDisplayName(accounts, item.remote_account_id)} #${item.remote_account_id}` : "系统操作"}
+              </p>
+            </div>
+            {item.success ? <Badge variant="outline">成功</Badge> : <Badge variant="destructive">失败</Badge>}
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">{auditDetail(item.error_message || item.detail)}</p>
+          <p className="text-xs text-muted-foreground">{relativeTime(item.created_at)} · {sourceLabel(item.source)}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function AuditTable({ items, accounts, empty }: { items: MainStationAuditLog[]; accounts: MainStationAccount[]; empty: string }) {
   return (
     <div className="overflow-x-auto border">
@@ -731,6 +859,31 @@ function channelName(channels: Channel[], channelID: number) {
   return channels.find((channel) => channel.id === channelID)?.name ?? `来源 #${channelID}`
 }
 
+function accountDisplayName(accounts: MainStationAccount[], remoteAccountID: number) {
+  return accounts.find((account) => account.remote_account_id === remoteAccountID)?.name ?? "Account"
+}
+
+function guardLockLabel(lockType: string) {
+  return ({
+    manual: "人工停用",
+    health: "健康异常",
+    margin: "利润不足",
+    sync: "同步保护",
+    credential: "凭据异常",
+    binding: "绑定异常",
+  } as Record<string, string>)[lockType] ?? lockType
+}
+
+function guardLockReason(reason?: string) {
+  if (!reason) return "未记录停用原因"
+  return ({
+    "member health checks reached quarantine threshold": "连续探活失败达到自动停用阈值",
+    "remote account no longer exists": "主站远端账号已经不存在",
+    "new managed member is awaiting initial health checks": "新账号正在等待首次健康检测",
+    "managed member is being removed": "账号正在执行删除流程",
+  } as Record<string, string>)[reason] ?? reason
+}
+
 function actionLabel(action: string) {
   const labels: Record<string, string> = {
     member_bind: "接管账号",
@@ -753,7 +906,7 @@ function actionLabel(action: string) {
 }
 
 function sourceLabel(source: string) {
-  return ({ manual: "人工操作", admin: "管理员", health: "健康探测", scheduler: "定时任务", margin: "利润保护", system: "系统" } as Record<string, string>)[source] ?? source
+  return ({ manual: "人工操作", admin: "管理员", health: "健康探测", scheduler: "定时任务", margin: "利润保护", syncer: "同步流程", system: "系统" } as Record<string, string>)[source] ?? source
 }
 
 function auditDetail(detail?: string) {
