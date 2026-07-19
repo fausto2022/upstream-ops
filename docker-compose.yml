@@ -13,7 +13,7 @@ services:
       SERVER_MODE: ${SERVER_MODE:-release}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       APP_SECRET: ${APP_SECRET:?APP_SECRET is required, set it in .env}
-      # 鉴权默认关闭。设 AUTH_ENABLED=true 时 ADMIN_PASSWORD 也必须填，否则后端启动失败。
+      # 仅在 data/config.yaml 尚未保存 auth 配置时用于首次初始化；之后以系统设置为准。
       AUTH_ENABLED: ${AUTH_ENABLED:-false}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}

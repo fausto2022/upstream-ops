@@ -244,6 +244,8 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-a-strong-password
 ```
 
+These authentication environment variables bootstrap the first startup only. Once `data/config.yaml` contains an `auth` section, credentials saved from **System Settings** are authoritative and remain effective after container restarts or upgrades.
+
 Docker pulls `ghcr.io/fausto2022/relaydeck:${IMAGE_TAG:-edge}` by default. Configuration and data are stored in the host `data/` directory.
 
 Start:
@@ -391,10 +393,12 @@ AUTH_TOKEN_SECRET=
 ```
 
 - `APP_SECRET`: required master secret.
-- `AUTH_ENABLED`: enables admin login.
-- `ADMIN_USERNAME`: admin username.
-- `ADMIN_PASSWORD`: admin password.
-- `AUTH_TOKEN_SECRET`: token signing secret. Falls back to `APP_SECRET` when empty.
+- `AUTH_ENABLED`: initial admin-login switch when no persisted `auth` configuration exists.
+- `ADMIN_USERNAME`: initial admin username.
+- `ADMIN_PASSWORD`: initial admin password.
+- `AUTH_TOKEN_SECRET`: initial token signing secret. Falls back to `APP_SECRET` when empty.
+
+After the first configuration is persisted, update authentication from **System Settings**. The saved values in `data/config.yaml` take precedence on later restarts.
 
 ## Local Development
 

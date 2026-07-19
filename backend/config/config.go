@@ -171,12 +171,53 @@ func Load(path string) (*Config, error) {
 }
 
 func LoadWithPath(path string) (*Config, string, error) {
-	return load(path, true)
+	cfg, usedPath, err := load(path, true)
+	if err != nil {
+		return nil, "", err
+	}
+	configPath := path
+	if configPath == "" {
+		configPath = usedPath
+	}
+	if configPath == "" {
+		return cfg, usedPath, nil
+	}
+	hasAuth, err := configSectionExists(configPath, "auth")
+	if os.IsNotExist(err) {
+		return cfg, usedPath, nil
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("inspect persisted auth config: %w", err)
+	}
+	if !hasAuth {
+		return cfg, usedPath, nil
+	}
+	fileCfg, err := LoadFile(configPath)
+	if err != nil {
+		return nil, "", err
+	}
+	// 鉴权环境变量只用于首次启动初始化。配置文件一旦保存过 auth，
+	// 后续重启必须沿用系统设置中的账号密码，避免容器环境覆盖用户修改。
+	cfg.Auth = fileCfg.Auth
+	return cfg, usedPath, nil
 }
 
 func LoadFile(path string) (*Config, error) {
 	cfg, _, err := load(path, false)
 	return cfg, err
+}
+
+func configSectionExists(path, section string) (bool, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal(body, &root); err != nil {
+		return false, fmt.Errorf("decode config sections: %w", err)
+	}
+	_, ok := root[section]
+	return ok, nil
 }
 
 func load(path string, withEnv bool) (*Config, string, error) {
