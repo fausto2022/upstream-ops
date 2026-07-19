@@ -28,6 +28,7 @@ func (f *blockingMainStation) RunDueHealthChecks(context.Context) {
 	<-f.release
 }
 
+func (f *blockingMainStation) CleanupTemporaryAPIKeys(context.Context)    {}
 func (f *blockingMainStation) SyncForScheduler(context.Context)           {}
 func (f *blockingMainStation) RunDueSchedulingReconciles(context.Context) {}
 func (f *blockingMainStation) RunDueRankings(context.Context)             {}

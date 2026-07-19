@@ -165,6 +165,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&MainAccountGuardLock{},
 		&MainAccountAuditLog{},
 		&MainStationNotificationCooldown{},
+		&MainStationTemporaryAPIKey{},
 	); err != nil {
 		return err
 	}

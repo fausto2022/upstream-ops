@@ -48,6 +48,7 @@ func registerChannels(g *gin.RouterGroup, d *Deps) {
 	gp.POST("/:id/api-keys/:key_id/reveal", func(c *gin.Context) { revealChannelAPIKey(c, d) })
 	gp.POST("/:id/sync", func(c *gin.Context) { syncChannel(c, d) })
 	gp.GET("/:id/rates", func(c *gin.Context) { channelRates(c, d) })
+	gp.POST("/:id/rates/:rate_id/test", func(c *gin.Context) { quickTestChannelRate(c, d) })
 	gp.GET("/:id/balance-history", func(c *gin.Context) { balanceHistory(c, d) })
 }
 
@@ -709,6 +710,34 @@ func channelRateOutputs(list []storage.RateSnapshot, connections map[uint][]main
 		})
 	}
 	return result
+}
+
+func quickTestChannelRate(c *gin.Context, d *Deps) {
+	if d.MainStation == nil {
+		fail(c, http.StatusServiceUnavailable, errors.New("主站服务尚未初始化"))
+		return
+	}
+	channelID, err := uintParam(c, "id")
+	if err != nil || channelID == 0 {
+		fail(c, http.StatusBadRequest, errors.New("渠道参数不正确"))
+		return
+	}
+	rateID, err := uintParam(c, "rate_id")
+	if err != nil || rateID == 0 {
+		fail(c, http.StatusBadRequest, errors.New("倍率分组参数不正确"))
+		return
+	}
+	var in mainstation.RateQuickTestInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		fail(c, http.StatusBadRequest, errors.New("快速测试参数不正确"))
+		return
+	}
+	result, err := d.MainStation.QuickTestRate(c.Request.Context(), channelID, rateID, in)
+	if err != nil {
+		failMainStation(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func applyRechargeMultiplierToRates(list []storage.RateSnapshot, channelItem *storage.Channel) {

@@ -30,6 +30,14 @@ func (r *Rates) ListByChannel(channelID uint) ([]RateSnapshot, error) {
 	return list, nil
 }
 
+func (r *Rates) FindByID(channelID, id uint) (*RateSnapshot, error) {
+	var item RateSnapshot
+	if err := r.db.First(&item, "id = ? AND channel_id = ?", id, channelID).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 // Upsert 更新或插入倍率快照，返回此前的记录（若有），调用方据此判断是否变化。
 func (r *Rates) Upsert(snapshot *RateSnapshot) (*RateSnapshot, error) {
 	var prev RateSnapshot

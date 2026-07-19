@@ -11,6 +11,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"sort"
 	"strconv"
@@ -53,6 +54,7 @@ type probeExecution struct {
 	ErrorClass   string
 	HTTPStatus   int
 	LatencyMS    int64
+	TTFBMS       int64
 	InputTokens  *int64
 	OutputTokens *int64
 	TotalTokens  *int64
@@ -283,7 +285,15 @@ func (s *Service) executeL1(ctx context.Context, model string, member *storage.M
 	if err != nil {
 		return probeExecution{Status: "config_error", ErrorClass: "credential_missing", Model: model, Message: err.Error()}
 	}
-	mode := strings.ToLower(strings.TrimSpace(member.HealthAPIMode))
+	request, err := buildL1ProbeRequest(member.HealthAPIMode, model)
+	if err != nil {
+		return probeExecution{Status: "config_error", ErrorClass: "protocol_unsupported", Model: model, Message: err.Error()}
+	}
+	return s.performProbeRequest(ctx, channel, secret, request)
+}
+
+func buildL1ProbeRequest(mode, model string) (probeRequest, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
 	request := probeRequest{Method: http.MethodPost, Model: model, Headers: map[string]string{"Content-Type": "application/json"}}
 	switch mode {
 	case "", "openai_chat":
@@ -313,9 +323,9 @@ func (s *Service) executeL1(ctx context.Context, model string, member *storage.M
 			"generationConfig": map[string]any{"maxOutputTokens": 8},
 		}
 	default:
-		return probeExecution{Status: "config_error", ErrorClass: "protocol_unsupported", Model: model, Message: "unsupported health api mode"}
+		return probeRequest{}, errors.New("unsupported health api mode")
 	}
-	return s.performProbeRequest(ctx, channel, secret, request)
+	return request, nil
 }
 
 func (s *Service) executeL2(ctx context.Context, model string, member *storage.MainAccountPoolMember) probeExecution {
@@ -392,36 +402,46 @@ func (s *Service) performProbeRequest(ctx context.Context, channel *storage.Chan
 	default:
 		httpRequest.Header.Set("Authorization", "Bearer "+secret)
 	}
+	var firstByteAt time.Time
+	httpRequest = httpRequest.WithContext(httptrace.WithClientTrace(httpRequest.Context(), &httptrace.ClientTrace{
+		GotFirstResponseByte: func() {
+			firstByteAt = s.now()
+		},
+	}))
 	started := s.now()
 	response, err := s.probeHTTPClient(channel).Do(httpRequest)
 	latency := s.now().Sub(started).Milliseconds()
+	ttfb := int64(0)
+	if !firstByteAt.IsZero() {
+		ttfb = firstByteAt.Sub(started).Milliseconds()
+	}
 	if err != nil {
 		_, class := classifyProbeFailure(0, err)
 		return probeExecution{
 			Status: "failure", ErrorClass: class, Protocol: request.Protocol, Model: request.Model,
-			Endpoint: request.Path, LatencyMS: latency, Message: redactSecretError(err, secret).Error(),
+			Endpoint: request.Path, LatencyMS: latency, TTFBMS: ttfb, Message: redactSecretError(err, secret).Error(),
 		}
 	}
 	defer response.Body.Close()
 	raw, readErr := io.ReadAll(io.LimitReader(response.Body, probeResponseBodyLimit+1))
 	if readErr != nil {
-		return probeExecution{Status: "failure", ErrorClass: "response_read", HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, Message: readErr.Error()}
+		return probeExecution{Status: "failure", ErrorClass: "response_read", HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, TTFBMS: ttfb, Message: readErr.Error()}
 	}
 	if int64(len(raw)) > probeResponseBodyLimit {
-		return probeExecution{Status: "failure", ErrorClass: "response_too_large", HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, Message: "response exceeded 64 KiB limit"}
+		return probeExecution{Status: "failure", ErrorClass: "response_too_large", HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, TTFBMS: ttfb, Message: "response exceeded 64 KiB limit"}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		message := redactSecretError(connector.HTTPStatusError(response.StatusCode, raw), secret).Error()
 		status, class := classifyHTTPFailure(response.StatusCode, message)
-		return probeExecution{Status: status, ErrorClass: class, HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, Message: message}
+		return probeExecution{Status: status, ErrorClass: class, HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, TTFBMS: ttfb, Message: message}
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
-		return probeExecution{Status: "failure", ErrorClass: "empty_response", HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, Message: "upstream returned an empty response"}
+		return probeExecution{Status: "failure", ErrorClass: "empty_response", HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model, Endpoint: request.Path, LatencyMS: latency, TTFBMS: ttfb, Message: "upstream returned an empty response"}
 	}
 	input, output, total := parseProbeUsage(raw)
 	return probeExecution{
 		Status: "success", HTTPStatus: response.StatusCode, Protocol: request.Protocol, Model: request.Model,
-		Endpoint: request.Path, LatencyMS: latency, InputTokens: input, OutputTokens: output, TotalTokens: total,
+		Endpoint: request.Path, LatencyMS: latency, TTFBMS: ttfb, InputTokens: input, OutputTokens: output, TotalTokens: total,
 		Message: "probe succeeded",
 	}
 }

@@ -903,6 +903,7 @@ function actionLabel(action: string) {
     main_station_sync: "同步主站信息",
     protection_policy_update: "更新保护策略",
     main_station_update: "更新主站配置",
+    rate_quick_test: "快速测试上游分组",
   }
   return labels[action] ?? action
 }

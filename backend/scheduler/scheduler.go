@@ -38,6 +38,7 @@ type Scheduler struct {
 
 type mainStationHealthService interface {
 	RunDueHealthChecks(ctx context.Context)
+	CleanupTemporaryAPIKeys(ctx context.Context)
 	SyncForScheduler(ctx context.Context)
 	RunDueSchedulingReconciles(ctx context.Context)
 	RunDueRankings(ctx context.Context)
@@ -124,6 +125,7 @@ func (s *Scheduler) runMainStationHealth() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	s.mainStation.RunDueHealthChecks(ctx)
+	s.mainStation.CleanupTemporaryAPIKeys(ctx)
 	s.mainStation.SyncForScheduler(ctx)
 	s.mainStation.RunDueSchedulingReconciles(ctx)
 	s.mainStation.RunDueRankings(ctx)

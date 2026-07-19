@@ -832,6 +832,35 @@ func (r *MainStationStore) TryClaimNotificationCooldown(dedupKey, event string, 
 	return res.RowsAffected > 0, nil
 }
 
+func (r *MainStationStore) CreateTemporaryAPIKey(item *MainStationTemporaryAPIKey) error {
+	return r.db.Create(item).Error
+}
+
+func (r *MainStationStore) DeleteTemporaryAPIKey(id uint) error {
+	return r.db.Delete(&MainStationTemporaryAPIKey{}, id).Error
+}
+
+func (r *MainStationStore) MarkTemporaryAPIKeyCleanupFailure(id uint, at time.Time, errText string) error {
+	return r.db.Model(&MainStationTemporaryAPIKey{}).Where("id = ?", id).Updates(map[string]any{
+		"cleanup_attempts": gorm.Expr("cleanup_attempts + 1"),
+		"last_cleanup_at":  at,
+		"cleanup_error":    strings.TrimSpace(errText),
+	}).Error
+}
+
+func (r *MainStationStore) ListTemporaryAPIKeysForCleanup(now, retryBefore time.Time, limit int) ([]MainStationTemporaryAPIKey, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var list []MainStationTemporaryAPIKey
+	err := r.db.Where(
+		"expires_at <= ? OR (cleanup_error <> '' AND (last_cleanup_at IS NULL OR last_cleanup_at <= ?))",
+		now,
+		retryBefore,
+	).Order("expires_at ASC, id ASC").Limit(limit).Find(&list).Error
+	return list, err
+}
+
 func normalizeStoragePage(page, pageSize int) (int, int) {
 	if page < 1 {
 		page = 1

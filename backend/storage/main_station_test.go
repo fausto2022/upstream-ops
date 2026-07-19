@@ -65,6 +65,7 @@ func TestEmptyDatabaseCreatesMainStationSchemaWithoutConfiguration(t *testing.T)
 		&MainAccountProfitCheck{},
 		&MainAccountGuardLock{},
 		&MainAccountAuditLog{},
+		&MainStationTemporaryAPIKey{},
 	}
 	for _, model := range models {
 		if !db.Migrator().HasTable(model) {

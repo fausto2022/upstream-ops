@@ -260,3 +260,22 @@ type MainStationNotificationCooldown struct {
 func (MainStationNotificationCooldown) TableName() string {
 	return "main_station_notification_cooldowns"
 }
+
+// MainStationTemporaryAPIKey 记录快速测试创建、但尚未确认删除的上游 Key。
+// 表中不保存 Key 明文；记录存在即表示后台仍需执行清理。
+type MainStationTemporaryAPIKey struct {
+	ID              uint       `gorm:"primaryKey" json:"id"`
+	ChannelID       uint       `gorm:"not null;uniqueIndex:idx_main_temp_key_channel_remote;index" json:"channel_id"`
+	RemoteKeyID     int64      `gorm:"not null;uniqueIndex:idx_main_temp_key_channel_remote" json:"remote_key_id"`
+	KeyName         string     `gorm:"size:128;not null" json:"key_name"`
+	ExpiresAt       time.Time  `gorm:"not null;index" json:"expires_at"`
+	CleanupAttempts int        `gorm:"not null;default:0" json:"cleanup_attempts"`
+	LastCleanupAt   *time.Time `json:"last_cleanup_at,omitempty"`
+	CleanupError    string     `gorm:"type:text" json:"cleanup_error,omitempty"`
+	CreatedAt       time.Time  `gorm:"not null" json:"created_at"`
+	UpdatedAt       time.Time  `gorm:"not null" json:"updated_at"`
+}
+
+func (MainStationTemporaryAPIKey) TableName() string {
+	return "main_station_temporary_api_keys"
+}

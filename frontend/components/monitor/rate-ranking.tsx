@@ -1,30 +1,26 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ChevronDown, ChevronUp, Link2, Unlink } from "lucide-react"
+import { ChevronRight, Link2, TestTubeDiagonal, Unlink } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  RATE_PROVIDERS,
+  RateRankingDialog,
+  quickTestUnavailableReason,
+  type RateProviderType,
+} from "@/components/monitor/rate-ranking-dialog"
 import { useChannels, useMultiChannelRates } from "@/lib/queries"
 import { formatRatio } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { RateSnapshot } from "@/lib/api-types"
 
-type ProviderType = "openai" | "anthropic" | "gemini" | "grok" | "image" | "other"
-
 const DEFAULT_VISIBLE_COUNT = 5
 
-const PROVIDERS: Array<{ value: ProviderType; label: string }> = [
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "gemini", label: "Gemini" },
-  { value: "grok", label: "Grok" },
-  { value: "image", label: "生图" },
-  { value: "other", label: "其他" },
-]
-
-const PROVIDER_PATTERNS: Array<{ type: ProviderType; pattern: RegExp }> = [
+const PROVIDER_PATTERNS: Array<{ type: RateProviderType; pattern: RegExp }> = [
   { type: "anthropic", pattern: /anthropic|claude|sonnet|opus|haiku|kiro|cc\s*max|ccmax|aws/i },
   { type: "gemini", pattern: /gemini|google/i },
   { type: "grok", pattern: /grok|xai/i },
@@ -32,7 +28,7 @@ const PROVIDER_PATTERNS: Array<{ type: ProviderType; pattern: RegExp }> = [
   { type: "openai", pattern: /openai|gpt|codex|\bplus\b|\bpro\b|\bteam\b|快速稳定|散户|无限制|测试/i },
 ]
 
-function classifyRate(rate: RateSnapshot): ProviderType {
+function classifyRate(rate: RateSnapshot): RateProviderType {
   const text = `${rate.model_name} ${rate.description ?? ""}`
   return PROVIDER_PATTERNS.find((item) => item.pattern.test(text))?.type ?? "other"
 }
@@ -41,8 +37,9 @@ export function RateRanking() {
   const channels = useChannels()
   const channelIDs = useMemo(() => (channels.data ?? []).map((channel) => channel.id), [channels.data])
   const rates = useMultiChannelRates(channelIDs)
-  const [provider, setProvider] = useState<ProviderType>("openai")
-  const [expanded, setExpanded] = useState(false)
+  const [provider, setProvider] = useState<RateProviderType>("openai")
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [initialRateID, setInitialRateID] = useState<number | null>(null)
 
   const channelMap = useMemo(
     () => new Map((channels.data ?? []).map((channel) => [channel.id, channel])),
@@ -54,12 +51,20 @@ export function RateRanking() {
       .sort((left, right) => left.ratio - right.ratio || left.model_name.localeCompare(right.model_name)),
     [provider, rates.data],
   )
-  const visible = expanded ? ranked : ranked.slice(0, DEFAULT_VISIBLE_COUNT)
-  const canExpand = ranked.length > DEFAULT_VISIBLE_COUNT
+  const visible = ranked.slice(0, DEFAULT_VISIBLE_COUNT)
 
   function handleProviderChange(value: string) {
-    setProvider(value as ProviderType)
-    setExpanded(false)
+    setProvider(value as RateProviderType)
+  }
+
+  function openRanking() {
+    setInitialRateID(null)
+    setDialogOpen(true)
+  }
+
+  function openQuickTest(rateID: number) {
+    setInitialRateID(rateID)
+    setDialogOpen(true)
   }
 
   return (
@@ -72,10 +77,9 @@ export function RateRanking() {
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">按换算后倍率从低到高排列</p>
         </div>
-        {canExpand ? (
-          <Button variant="ghost" size="sm" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-            {expanded ? <ChevronUp /> : <ChevronDown />}
-            {expanded ? "收起" : "查看全部"}
+        {ranked.length > DEFAULT_VISIBLE_COUNT ? (
+          <Button variant="ghost" size="sm" onClick={openRanking}>
+            查看更多<ChevronRight />
           </Button>
         ) : (
           <span className="text-xs text-muted-foreground">默认展示前 {DEFAULT_VISIBLE_COUNT} 个分组</span>
@@ -85,7 +89,7 @@ export function RateRanking() {
       <div className="border-b border-border px-4 py-2 sm:px-5">
         <Tabs value={provider} onValueChange={handleProviderChange}>
           <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:flex sm:w-auto">
-            {PROVIDERS.map((item) => <TabsTrigger key={item.value} value={item.value} className="min-w-0 px-2">{item.label}</TabsTrigger>)}
+            {RATE_PROVIDERS.map((item) => <TabsTrigger key={item.value} value={item.value} className="min-w-0 px-2">{item.label}</TabsTrigger>)}
           </TabsList>
         </Tabs>
       </div>
@@ -107,7 +111,13 @@ export function RateRanking() {
                     <div className="truncate text-sm font-medium" title={rate.model_name}>{rate.model_name}</div>
                     <MainStationConnection rate={rate} compact />
                   </div>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums">{formatRatio(rate.ratio)}</span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="text-sm font-semibold tabular-nums">{formatRatio(rate.ratio)}</span>
+                    <QuickTestButton
+                      reason={quickTestUnavailableReason(rate, channel, provider)}
+                      onClick={() => openQuickTest(rate.id)}
+                    />
+                  </div>
                 </div>
               )
             })}
@@ -121,6 +131,7 @@ export function RateRanking() {
                   <th className="px-3 py-2 font-medium">分组</th>
                   <th className="w-56 px-3 py-2 font-medium">主站接入</th>
                   <th className="w-36 px-4 py-2 text-right font-medium">换算后倍率</th>
+                  <th className="w-14 px-3 py-2 text-right font-medium">测试</th>
                 </tr>
               </thead>
               <tbody>
@@ -138,22 +149,47 @@ export function RateRanking() {
                       </td>
                       <td className="px-3 py-2.5"><MainStationConnection rate={rate} /></td>
                       <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{formatRatio(rate.ratio)}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        <QuickTestButton
+                          reason={quickTestUnavailableReason(rate, channel, provider)}
+                          onClick={() => openQuickTest(rate.id)}
+                        />
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-          {expanded && canExpand ? (
-            <div className="flex justify-center border-t border-border px-4 py-2">
-              <Button variant="ghost" size="sm" onClick={() => setExpanded(false)}>
-                <ChevronUp />收起
-              </Button>
-            </div>
-          ) : null}
         </>
       )}
+      <RateRankingDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        provider={provider}
+        onProviderChange={setProvider}
+        rates={ranked}
+        channels={channels.data ?? []}
+        initialRateID={initialRateID}
+        onAdded={() => void rates.refetch()}
+      />
     </Card>
+  )
+}
+
+function QuickTestButton({ reason, onClick }: { reason: string; onClick: () => void }) {
+  const label = reason || "快速测试"
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button variant="ghost" size="icon-sm" aria-label={label} disabled={!!reason} onClick={onClick}>
+            <TestTubeDiagonal />
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 

@@ -125,6 +125,27 @@ export interface MainStationRateGroup {
   group_name: string
 }
 
+export interface RateQuickTestResult {
+  status: "usable" | "reachable" | "unreachable"
+  usable: boolean
+  reachable: boolean
+  protocol: string
+  model: string
+  endpoint: string
+  http_status?: number
+  latency_ms: number
+  ttfb_ms: number
+  error_class?: string
+  message: string
+  input_tokens?: number
+  output_tokens?: number
+  total_tokens?: number
+  temporary_key_name: string
+  temporary_key_status: "deleted" | "pending"
+  cleanup_error?: string
+  tested_at: string
+}
+
 export interface RateChangeLog {
   id: number
   channel_id: number
