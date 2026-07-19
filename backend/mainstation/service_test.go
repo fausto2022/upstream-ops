@@ -37,6 +37,8 @@ type fakeAdminClient struct {
 	nextAccountID       int64
 	accountModels       map[int64][]string
 	syncModelCalls      []int64
+	syncModelsErr       error
+	syncModelsEmpty     bool
 }
 
 func (f *fakeAdminClient) Ping(context.Context, sub2api.AdminTarget) error { return f.pingErr }
@@ -127,6 +129,12 @@ func (f *fakeAdminClient) DeleteAccount(_ context.Context, _ sub2api.AdminTarget
 }
 func (f *fakeAdminClient) SyncAccountModelsFromUpstream(_ context.Context, _ sub2api.AdminTarget, id int64) ([]string, error) {
 	f.syncModelCalls = append(f.syncModelCalls, id)
+	if f.syncModelsErr != nil {
+		return nil, f.syncModelsErr
+	}
+	if f.syncModelsEmpty {
+		return []string{}, nil
+	}
 	models := f.accountModels[id]
 	if len(models) == 0 {
 		return nil, gorm.ErrRecordNotFound
@@ -453,6 +461,7 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	service, db, admin, channels := newTestService(t)
 	configureTestStation(t, service)
 	admin.groups = []sub2api.AdminGroup{{ID: 31, Name: "main-group", RateMultiplier: 1, Status: "active"}}
+	admin.accountModels = map[int64][]string{1000: {"gpt-test"}}
 	if _, err := service.Sync(context.Background()); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -519,6 +528,9 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	}
 	if len(admin.schedulableCalls) != 1 || !admin.schedulableCalls[0] {
 		t.Fatalf("schedulable calls = %#v", admin.schedulableCalls)
+	}
+	if len(admin.syncModelCalls) != 1 || admin.syncModelCalls[0] != *member.RemoteAccountID {
+		t.Fatalf("sync model calls = %#v", admin.syncModelCalls)
 	}
 	healthInterval := 1
 	healthFailureThreshold := 20
@@ -593,6 +605,25 @@ func TestEnsureManagedSourceAPIKeyRecreatesMissingRemoteKey(t *testing.T) {
 	}
 }
 
+func TestSyncManagedAccountModelsRejectsErrorsAndEmptyResults(t *testing.T) {
+	service, _, admin, _ := newTestService(t)
+	target := sub2api.AdminTarget{BaseURL: "https://main.example.com", APIKey: "admin-key"}
+	admin.syncModelsErr = errors.New("upstream unavailable")
+	if err := service.syncManagedAccountModels(context.Background(), admin, target, 31); err == nil || !strings.Contains(err.Error(), "upstream unavailable") {
+		t.Fatalf("sync model error = %v", err)
+	}
+	admin.syncModelsErr = nil
+	admin.syncModelsEmpty = true
+	if err := service.syncManagedAccountModels(context.Background(), admin, target, 31); err == nil || !strings.Contains(err.Error(), "returned no models") {
+		t.Fatalf("empty sync model error = %v", err)
+	}
+	admin.syncModelsEmpty = false
+	admin.accountModels = map[int64][]string{31: {"gpt-test"}}
+	if err := service.syncManagedAccountModels(context.Background(), admin, target, 31); err != nil {
+		t.Fatalf("sync managed account models: %v", err)
+	}
+}
+
 func TestSyncMemberRecreatesMissingManagedRemoteAccount(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -612,6 +643,7 @@ func TestSyncMemberRecreatesMissingManagedRemoteAccount(t *testing.T) {
 	service, db, admin, channels := newTestService(t)
 	configureTestStation(t, service)
 	admin.groups = []sub2api.AdminGroup{{ID: 31, Name: "main-group", RateMultiplier: 1, Status: "active"}}
+	admin.accountModels = map[int64][]string{1000: {"gpt-test"}, 1001: {"gpt-test"}}
 	if _, err := service.Sync(context.Background()); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -652,6 +684,9 @@ func TestSyncMemberRecreatesMissingManagedRemoteAccount(t *testing.T) {
 	}
 	if len(admin.createRequests) != 2 {
 		t.Fatalf("create requests = %#v", admin.createRequests)
+	}
+	if !slices.Equal(admin.syncModelCalls, []int64{oldRemoteAccountID, *recreated.RemoteAccountID}) {
+		t.Fatalf("sync model calls = %#v", admin.syncModelCalls)
 	}
 	request := admin.createRequests[1]
 	if request.Credentials["pool_mode"] != true || request.Credentials["pool_mode_retry_count"] != managedAccountPoolModeRetryCount {

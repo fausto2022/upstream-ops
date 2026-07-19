@@ -736,9 +736,12 @@ func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*stora
 	if err := s.store.UpsertAccountSnapshot(&snapshot); err != nil && s.log != nil {
 		s.log.Warn("save managed account snapshot", "err", err, "member_id", member.ID)
 	}
-	if _, err := s.ActivateGuardLock(ctx, remoteID, "sync", "new managed member is awaiting initial health checks", map[string]any{
+	if _, err := s.ActivateGuardLock(ctx, remoteID, "sync", "managed member is awaiting model sync and initial health checks", map[string]any{
 		"pool_id": poolID, "member_id": member.ID,
 	}, "syncer"); err != nil {
+		return nil, s.failManagedMember(member, err)
+	}
+	if err := s.syncManagedAccountModels(ctx, client, adminTarget, remoteID); err != nil {
 		return nil, s.failManagedMember(member, err)
 	}
 	l0, err := s.CheckMember(ctx, poolID, member.ID, HealthCheckInput{Level: "L0", Force: true})
@@ -769,6 +772,17 @@ func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*stora
 		s.log.Warn("mark main station scheduling rank dirty", "err", rankingErr, "pool_id", poolID)
 	}
 	return member, nil
+}
+
+func (s *Service) syncManagedAccountModels(ctx context.Context, client adminClient, target sub2api.AdminTarget, remoteAccountID int64) error {
+	models, err := client.SyncAccountModelsFromUpstream(ctx, target, remoteAccountID)
+	if err != nil {
+		return fmt.Errorf("sync managed account models from upstream: %w", err)
+	}
+	if len(models) == 0 {
+		return errors.New("sync managed account models from upstream returned no models")
+	}
+	return nil
 }
 
 func (s *Service) managedAccountRequest(ctx context.Context, pool *storage.MainAccountPool, member *storage.MainAccountPoolMember, priority int) (sub2api.AdminAccount, string, error) {
