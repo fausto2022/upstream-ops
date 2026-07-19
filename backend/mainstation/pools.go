@@ -669,14 +669,10 @@ func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*stora
 	client := s.adminFactory()
 	adminTarget := sub2api.AdminTarget{BaseURL: target.BaseURL, APIKey: adminAPIKey}
 	priority := normalizeSchedulingPriority(member.Priority)
-	if member.RemoteAccountID == nil {
-		priorities, priorityErr := s.poolSchedulingPriorities(poolID)
-		if priorityErr != nil {
-			return nil, s.failManagedMember(member, priorityErr)
+	if member.RemoteAccountID != nil {
+		if snapshot, snapshotErr := s.store.FindAccountSnapshot(*member.RemoteAccountID); snapshotErr == nil && snapshot.Priority > 0 {
+			priority = snapshot.Priority
 		}
-		priority = priorities[member.ID]
-	} else if snapshot, snapshotErr := s.store.FindAccountSnapshot(*member.RemoteAccountID); snapshotErr == nil && snapshot.Priority > 0 {
-		priority = snapshot.Priority
 	}
 	request, secret, err := s.managedAccountRequest(ctx, pool, member, priority)
 	if err != nil {
@@ -818,7 +814,7 @@ func (s *Service) ensureManagedSourceAPIKey(ctx context.Context, pool *storage.M
 		}
 		return secret, nil
 	}
-	name := fmt.Sprintf("RelayDeck-%s-%d", compactName(pool.Name, 64), member.ID)
+	name := managedSourceAPIKeyName(pool, member)
 	key, err := s.channelSvc.CreateAPIKey(ctx, member.SourceChannelID, connector.APIKeyCreateRequest{
 		Name:    name,
 		Group:   member.SourceGroupName,
@@ -934,22 +930,28 @@ func (s *Service) DeleteMember(ctx context.Context, poolID, memberID uint, in De
 	client := s.adminFactory()
 	adminTarget := sub2api.AdminTarget{BaseURL: target.BaseURL, APIKey: adminAPIKey}
 	if member.RemoteAccountID != nil {
-		if _, err := s.ActivateGuardLock(ctx, *member.RemoteAccountID, "manual", "managed member is being removed", map[string]any{
+		remoteAccountID := *member.RemoteAccountID
+		_, pauseErr := s.ActivateGuardLock(ctx, remoteAccountID, "manual", "managed member is being removed", map[string]any{
 			"pool_id": poolID, "member_id": memberID,
-		}, "admin"); err != nil {
-			return fmt.Errorf("pause managed remote account before removal: %w", err)
+		}, "admin")
+		if pauseErr != nil && !(in.DeleteRemoteAccount && missingRemoteResource(pauseErr)) {
+			return fmt.Errorf("pause managed remote account before removal: %w", pauseErr)
 		}
 		if in.DeleteRemoteAccount {
-			if err := client.DeleteAccount(ctx, adminTarget, *member.RemoteAccountID); err != nil {
+			if err := client.DeleteAccount(ctx, adminTarget, remoteAccountID); err != nil && !missingRemoteResource(err) {
 				return fmt.Errorf("delete managed remote account: %w", err)
 			}
-		}
-		if err := s.ClearSchedulingLock(ctx, *member.RemoteAccountID, "manual", "admin"); err != nil {
-			return fmt.Errorf("clear temporary removal lock: %w", err)
+			if err := s.ClearSchedulingLock(ctx, remoteAccountID, "manual", "admin"); err != nil {
+				return fmt.Errorf("clear temporary removal lock: %w", err)
+			}
+		} else {
+			if _, err := s.ClearGuardLock(ctx, remoteAccountID, "manual", "admin"); err != nil {
+				return fmt.Errorf("restore managed remote account after local removal: %w", err)
+			}
 		}
 	}
 	if in.DeleteSourceAPIKey && member.SourceAPIKeyID != nil {
-		if err := s.channelSvc.DeleteAPIKey(ctx, member.SourceChannelID, *member.SourceAPIKeyID); err != nil {
+		if err := s.channelSvc.DeleteAPIKey(ctx, member.SourceChannelID, *member.SourceAPIKeyID); err != nil && !missingRemoteResource(err) {
 			return fmt.Errorf("delete managed source api key: %w", err)
 		}
 	}
@@ -1044,13 +1046,44 @@ func managedAccountName(pool *storage.MainAccountPool, member *storage.MainAccou
 	if name := strings.TrimSpace(member.AccountName); name != "" {
 		return compactName(name, 120)
 	}
-	return fmt.Sprintf("RelayDeck-%s-%d", compactName(pool.Name, 80), member.ID)
+	if name := strings.TrimSpace(member.SourceGroupName); name != "" {
+		return compactName(name, 120)
+	}
+	return compactName(pool.Name, 120)
+}
+
+func managedSourceAPIKeyName(pool *storage.MainAccountPool, member *storage.MainAccountPoolMember) string {
+	if member != nil {
+		if name := strings.TrimSpace(member.SourceGroupName); name != "" {
+			return truncateManagedName(name, 120)
+		}
+		if name := strings.TrimSpace(member.AccountName); name != "" {
+			return truncateManagedName(name, 120)
+		}
+	}
+	return truncateManagedName(pool.Name, 120)
+}
+
+func missingRemoteResource(err error) bool {
+	return errors.Is(err, gorm.ErrRecordNotFound) || statusCodeFromError(err) == 404
 }
 
 func compactName(value string, max int) string {
 	value = strings.Join(strings.Fields(strings.TrimSpace(value)), "-")
 	if value == "" {
 		value = "pool"
+	}
+	runes := []rune(value)
+	if len(runes) > max {
+		return string(runes[:max])
+	}
+	return value
+}
+
+func truncateManagedName(value string, max int) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		value = "默认分组"
 	}
 	runes := []rune(value)
 	if len(runes) > max {

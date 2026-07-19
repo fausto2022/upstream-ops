@@ -52,6 +52,36 @@ function num(v: string) {
   return Number(v || 0);
 }
 
+interface CronPreset {
+  label: string;
+  value: string;
+}
+
+const BALANCE_CRON_PRESETS: CronPreset[] = [
+  { label: "每分钟", value: "37 * * * * *" },
+  { label: "每 5 分钟", value: "37 */5 * * * *" },
+  { label: "每 15 分钟", value: "37 */15 * * * *" },
+  { label: "每 30 分钟", value: "37 */30 * * * *" },
+  { label: "每小时", value: "37 0 * * * *" },
+  { label: "每 6 小时", value: "37 0 */6 * * *" },
+];
+
+const RATE_CRON_PRESETS: CronPreset[] = [
+  { label: "每分钟", value: "13 * * * * *" },
+  { label: "每 5 分钟", value: "13 */5 * * * *" },
+  { label: "每 15 分钟", value: "13 */15 * * * *" },
+  { label: "每 30 分钟", value: "13 */30 * * * *" },
+  { label: "每小时", value: "13 0 * * * *" },
+  { label: "每 6 小时", value: "13 0 */6 * * *" },
+];
+
+const RETENTION_CRON_PRESETS: CronPreset[] = [
+  { label: "每天凌晨 03:17", value: "0 17 3 * * *" },
+  { label: "每周日凌晨 03:17", value: "0 17 3 * * 0" },
+];
+
+const RETENTION_DAY_PRESETS = [7, 15, 30, 60, 90, 180, 365];
+
 interface ProxyTestResult {
   ok: boolean;
   latency_ms: number;
@@ -398,48 +428,44 @@ export default function SettingsPage() {
               description="管理余额采集、倍率采集和历史清理任务。"
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <Field
-                  label="余额采集 Cron"
+                <CronScheduleField
+                  label="余额采集周期"
                   description="控制余额与消费同步的执行周期。"
-                >
-                  <Input
-                    value={form.scheduler.balanceCron}
-                    onChange={(e) =>
-                      setForm((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              scheduler: {
-                                ...prev.scheduler,
-                                balanceCron: e.target.value,
-                              },
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </Field>
-                <Field
-                  label="倍率采集 Cron"
+                  value={form.scheduler.balanceCron}
+                  presets={BALANCE_CRON_PRESETS}
+                  onChange={(value) =>
+                    setForm((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            scheduler: {
+                              ...prev.scheduler,
+                              balanceCron: value,
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                />
+                <CronScheduleField
+                  label="倍率采集周期"
                   description="控制分组倍率扫描的执行周期。"
-                >
-                  <Input
-                    value={form.scheduler.rateCron}
-                    onChange={(e) =>
-                      setForm((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              scheduler: {
-                                ...prev.scheduler,
-                                rateCron: e.target.value,
-                              },
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </Field>
+                  value={form.scheduler.rateCron}
+                  presets={RATE_CRON_PRESETS}
+                  onChange={(value) =>
+                    setForm((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            scheduler: {
+                              ...prev.scheduler,
+                              rateCron: value,
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                />
                 <Field
                   label="并发数"
                   description="调度器每轮最多同时处理的任务数。"
@@ -462,40 +488,37 @@ export default function SettingsPage() {
                     }
                   />
                 </Field>
-                <Field
-                  label="清理任务 Cron"
-                  description="留空则不执行历史数据清理。"
-                >
-                  <Input
-                    value={form.scheduler.retention.cron}
-                    onChange={(e) =>
-                      setForm((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              scheduler: {
-                                ...prev.scheduler,
-                                retention: {
-                                  ...prev.scheduler.retention,
-                                  cron: e.target.value,
-                                },
+                <CronScheduleField
+                  label="历史清理周期"
+                  description="控制过期历史数据的清理周期。"
+                  value={form.scheduler.retention.cron}
+                  presets={RETENTION_CRON_PRESETS}
+                  onChange={(value) =>
+                    setForm((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            scheduler: {
+                              ...prev.scheduler,
+                              retention: {
+                                ...prev.scheduler.retention,
+                                cron: value,
                               },
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </Field>
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                />
               </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Field
-                  label="监控日志保留天数"
-                  description="超过该天数的监控日志会被清理。"
+                  label="运行与同步日志"
+                  description="保留最近的监控和同步执行记录。"
                 >
-                  <Input
-                    type="number"
-                    value={String(form.scheduler.retention.monitorLogsDays)}
-                    onChange={(e) =>
+                  <RetentionDaysSelect
+                    value={form.scheduler.retention.monitorLogsDays}
+                    onChange={(value) =>
                       setForm((prev) =>
                         prev
                           ? {
@@ -504,7 +527,7 @@ export default function SettingsPage() {
                                 ...prev.scheduler,
                                 retention: {
                                   ...prev.scheduler.retention,
-                                  monitorLogsDays: num(e.target.value),
+                                  monitorLogsDays: value,
                                 },
                               },
                             }
@@ -514,15 +537,12 @@ export default function SettingsPage() {
                   />
                 </Field>
                 <Field
-                  label="余额快照保留天数"
-                  description="余额与消费趋势依赖这部分历史快照。"
+                  label="余额与消费快照"
+                  description="保留最近的余额和消费趋势数据。"
                 >
-                  <Input
-                    type="number"
-                    value={String(
-                      form.scheduler.retention.balanceSnapshotsDays,
-                    )}
-                    onChange={(e) =>
+                  <RetentionDaysSelect
+                    value={form.scheduler.retention.balanceSnapshotsDays}
+                    onChange={(value) =>
                       setForm((prev) =>
                         prev
                           ? {
@@ -531,7 +551,7 @@ export default function SettingsPage() {
                                 ...prev.scheduler,
                                 retention: {
                                   ...prev.scheduler.retention,
-                                  balanceSnapshotsDays: num(e.target.value),
+                                  balanceSnapshotsDays: value,
                                 },
                               },
                             }
@@ -541,15 +561,12 @@ export default function SettingsPage() {
                   />
                 </Field>
                 <Field
-                  label="通知日志保留天数"
-                  description="通知发送结果的历史留存时长。"
+                  label="通知日志"
+                  description="保留最近的通知发送结果。"
                 >
-                  <Input
-                    type="number"
-                    value={String(
-                      form.scheduler.retention.notificationLogsDays,
-                    )}
-                    onChange={(e) =>
+                  <RetentionDaysSelect
+                    value={form.scheduler.retention.notificationLogsDays}
+                    onChange={(value) =>
                       setForm((prev) =>
                         prev
                           ? {
@@ -558,7 +575,31 @@ export default function SettingsPage() {
                                 ...prev.scheduler,
                                 retention: {
                                   ...prev.scheduler.retention,
-                                  notificationLogsDays: num(e.target.value),
+                                  notificationLogsDays: value,
+                                },
+                              },
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </Field>
+                <Field
+                  label="公告记录"
+                  description="保留最近的上游公告记录。"
+                >
+                  <RetentionDaysSelect
+                    value={form.scheduler.retention.announcementsDays}
+                    onChange={(value) =>
+                      setForm((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              scheduler: {
+                                ...prev.scheduler,
+                                retention: {
+                                  ...prev.scheduler.retention,
+                                  announcementsDays: value,
                                 },
                               },
                             }
@@ -1330,6 +1371,97 @@ function Field({
       </div>
       <div className="mt-auto">{children}</div>
     </div>
+  );
+}
+
+function CronScheduleField({
+  label,
+  description,
+  value,
+  presets,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: string;
+  presets: CronPreset[];
+  onChange: (value: string) => void;
+}) {
+  const knownPreset = value === "" || presets.some((item) => item.value === value);
+  const [customOpen, setCustomOpen] = useState(!knownPreset);
+  const showCustom = customOpen || !knownPreset;
+  const selectValue = showCustom
+    ? "__custom__"
+    : value === ""
+      ? "__disabled__"
+      : value;
+
+  return (
+    <Field label={label} description={description}>
+      <div className="space-y-2">
+        <Select
+          value={selectValue}
+          onValueChange={(nextValue) => {
+            if (nextValue === "__custom__") {
+              setCustomOpen(true);
+              return;
+            }
+            setCustomOpen(false);
+            onChange(nextValue === "__disabled__" ? "" : nextValue);
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__disabled__">关闭</SelectItem>
+            {presets.map((preset) => (
+              <SelectItem key={preset.value} value={preset.value}>
+                {preset.label}
+              </SelectItem>
+            ))}
+            <SelectItem value="__custom__">自定义 Cron</SelectItem>
+          </SelectContent>
+        </Select>
+        {showCustom ? (
+          <Input
+            value={value}
+            placeholder="例如：37 */15 * * * *"
+            onChange={(event) => onChange(event.target.value)}
+          />
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
+function RetentionDaysSelect({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const values = RETENTION_DAY_PRESETS.includes(value)
+    ? RETENTION_DAY_PRESETS
+    : [...RETENTION_DAY_PRESETS, value].sort((left, right) => left - right);
+
+  return (
+    <Select value={String(value)} onValueChange={(nextValue) => onChange(num(nextValue))}>
+      <SelectTrigger className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="0">不自动清理</SelectItem>
+        {values
+          .filter((days) => days > 0)
+          .map((days) => (
+            <SelectItem key={days} value={String(days)}>
+              保留最近 {days} 天
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
   );
 }
 

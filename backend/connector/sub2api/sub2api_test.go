@@ -728,6 +728,25 @@ func TestCreateUpdateDeleteRevealAPIKey(t *testing.T) {
 	}
 }
 
+func TestDeleteAPIKeyAcceptsEmptySuccessResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v1/keys/8" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	if err := New().DeleteAPIKey(
+		context.Background(),
+		&connector.Channel{SiteURL: srv.URL},
+		&connector.AuthSession{AccessToken: "token"},
+		8,
+	); err != nil {
+		t.Fatalf("DeleteAPIKey empty response: %v", err)
+	}
+}
+
 func strPtr(v string) *string {
 	return &v
 }

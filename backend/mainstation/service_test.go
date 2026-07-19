@@ -31,6 +31,7 @@ type fakeAdminClient struct {
 	setSchedulableErr   error
 	applyBeforeSetError bool
 	deletedAccounts     []int64
+	deleteAccountErr    error
 	nextAccountID       int64
 	accountModels       map[int64][]string
 	syncModelCalls      []int64
@@ -120,7 +121,7 @@ func (f *fakeAdminClient) SetAccountSchedulable(_ context.Context, _ sub2api.Adm
 }
 func (f *fakeAdminClient) DeleteAccount(_ context.Context, _ sub2api.AdminTarget, id int64) error {
 	f.deletedAccounts = append(f.deletedAccounts, id)
-	return nil
+	return f.deleteAccountErr
 }
 func (f *fakeAdminClient) SyncAccountModelsFromUpstream(_ context.Context, _ sub2api.AdminTarget, id int64) ([]string, error) {
 	f.syncModelCalls = append(f.syncModelCalls, id)
@@ -142,12 +143,13 @@ func (f *fakeAdminClient) TestAccount(context.Context, sub2api.AdminTarget, int6
 }
 
 type fakeChannelService struct {
-	secret      string
-	groups      []connector.APIKeyGroup
-	keys        []connector.APIKey
-	createdKeys []connector.APIKeyCreateRequest
-	deletedKeys []int64
-	concurrency int
+	secret       string
+	groups       []connector.APIKeyGroup
+	keys         []connector.APIKey
+	createdKeys  []connector.APIKeyCreateRequest
+	deletedKeys  []int64
+	deleteKeyErr error
+	concurrency  int
 }
 
 func (f *fakeChannelService) RevealAPIKey(context.Context, uint, int64) (string, error) {
@@ -159,7 +161,7 @@ func (f *fakeChannelService) CreateAPIKey(_ context.Context, _ uint, req connect
 }
 func (f *fakeChannelService) DeleteAPIKey(_ context.Context, _ uint, id int64) error {
 	f.deletedKeys = append(f.deletedKeys, id)
-	return nil
+	return f.deleteKeyErr
 }
 func (f *fakeChannelService) ListAPIKeyGroups(context.Context, uint) ([]connector.APIKeyGroup, error) {
 	return append([]connector.APIKeyGroup(nil), f.groups...), nil
@@ -478,6 +480,9 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if len(channels.createdKeys) != 1 || len(admin.createRequests) != 1 {
 		t.Fatalf("create calls: keys=%d accounts=%d", len(channels.createdKeys), len(admin.createRequests))
 	}
+	if channels.createdKeys[0].Name != "source-group" {
+		t.Fatalf("managed source api key name = %q", channels.createdKeys[0].Name)
+	}
 	request := admin.createRequests[0]
 	if request.Name != "OpenAI-01" {
 		t.Fatalf("managed account name = %q", request.Name)
@@ -491,7 +496,7 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if request.Concurrency != channels.concurrency {
 		t.Fatalf("managed account concurrency = %d, want %d", request.Concurrency, channels.concurrency)
 	}
-	if request.Weight != channels.concurrency || request.LoadFactor != float64(channels.concurrency) || request.Priority != 10 {
+	if request.Weight != channels.concurrency || request.LoadFactor != float64(channels.concurrency) || request.Priority != 1 {
 		t.Fatalf("managed account automatic scheduling = %#v", request)
 	}
 	if len(admin.schedulableCalls) != 1 || !admin.schedulableCalls[0] {
@@ -517,7 +522,7 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 		t.Fatalf("scheduling-only edit should not run a full managed sync: %#v", admin.updateRequests)
 	}
 	service.RunDueRankings(context.Background())
-	if len(admin.schedulingUpdates) != 1 || admin.schedulingUpdates[0].Concurrency != 37 || admin.schedulingUpdates[0].Priority != 10 || admin.schedulingUpdates[0].LoadFactor != 37 {
+	if len(admin.schedulingUpdates) != 1 || admin.schedulingUpdates[0].Concurrency != 37 || admin.schedulingUpdates[0].Priority != 1 || admin.schedulingUpdates[0].LoadFactor != 37 {
 		t.Fatalf("deferred scheduling updates = %#v", admin.schedulingUpdates)
 	}
 
@@ -527,7 +532,7 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if len(admin.deletedAccounts) != 0 || len(channels.deletedKeys) != 0 {
 		t.Fatalf("default delete removed remote resources: accounts=%v keys=%v", admin.deletedAccounts, channels.deletedKeys)
 	}
-	if len(admin.schedulableCalls) != 2 || admin.schedulableCalls[1] {
+	if len(admin.schedulableCalls) != 3 || admin.schedulableCalls[1] || !admin.schedulableCalls[2] {
 		t.Fatalf("delete schedulable calls = %#v", admin.schedulableCalls)
 	}
 }
@@ -559,6 +564,49 @@ func TestUpdateBoundMemberEnabledReconcilesRemoteScheduling(t *testing.T) {
 	}
 	if !enabled.Enabled || len(admin.schedulableCalls) != 2 || !admin.schedulableCalls[1] {
 		t.Fatalf("enabled member=%#v calls=%#v", enabled, admin.schedulableCalls)
+	}
+}
+
+func TestDeleteManagedMemberToleratesAlreadyMissingRemoteResources(t *testing.T) {
+	service, db, admin, channels := newTestService(t)
+	configureTestStation(t, service)
+	admin.groups = []sub2api.AdminGroup{{ID: 11, Name: "default", Platform: "openai", RateMultiplier: 1, Status: "active"}}
+	admin.accounts = []sub2api.AdminAccount{{ID: 21, Name: "managed", Platform: "openai", Status: "active", Schedulable: true, Priority: 100, GroupIDs: []int64{11}}}
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	channel := createTestChannel(t, db)
+	groups, err := service.ListGroups(false)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups=%#v err=%v", groups, err)
+	}
+	pool, err := service.CreatePool(PoolInput{Name: "pool", Platform: "openai", TargetGroupIDs: []uint{groups[0].ID}})
+	if err != nil {
+		t.Fatalf("create pool: %v", err)
+	}
+	remoteID := int64(21)
+	keyID := int64(77)
+	member := &storage.MainAccountPoolMember{
+		PoolID: pool.ID, AccountName: "managed", OwnershipMode: "managed", SourceChannelID: channel.ID,
+		SourceAPIKeyID: &keyID, RemoteAccountID: &remoteID, RemoteAccountName: "managed", Enabled: true,
+		Priority: 100, Concurrency: 10, BindingStatus: "verified", Status: "active", LastHealthStatus: "healthy",
+	}
+	if err := service.store.CreateMember(member); err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	admin.deleteAccountErr = errors.New("status 404: account not found")
+	channels.deleteKeyErr = errors.New("status 404: api key not found")
+	if err := service.DeleteMember(context.Background(), pool.ID, member.ID, DeleteMemberInput{
+		Confirm: true, DeleteRemoteAccount: true, DeleteSourceAPIKey: true,
+	}); err != nil {
+		t.Fatalf("delete missing managed resources: %v", err)
+	}
+	if _, err := service.store.FindMember(pool.ID, member.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("deleted member lookup error = %v", err)
+	}
+	locks, err := service.store.ListActiveGuardLocks(remoteID)
+	if err != nil || len(locks) != 0 {
+		t.Fatalf("deleted member locks=%#v err=%v", locks, err)
 	}
 }
 

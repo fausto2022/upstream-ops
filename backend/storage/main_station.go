@@ -415,7 +415,12 @@ func (r *MainStationStore) UpdateMember(item *MainAccountPoolMember) error {
 }
 
 func (r *MainStationStore) DeleteMember(poolID, memberID uint) error {
-	return r.db.Where("id = ? AND pool_id = ?", memberID, poolID).Delete(&MainAccountPoolMember{}).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("member_id = ?", memberID).Delete(&MainAccountGuardLock{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ? AND pool_id = ?", memberID, poolID).Delete(&MainAccountPoolMember{}).Error
+	})
 }
 
 func (r *MainStationStore) AppendAudit(item *MainAccountAuditLog) error {

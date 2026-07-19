@@ -418,8 +418,8 @@ export default function MainStationPage() {
                     <p className="text-xs text-muted-foreground">{accounts.length} 个 Account</p>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    {selectedWorkspace ? <Button variant="outline" onClick={() => void handleRanking()} disabled={ranking}><ArrowUpDown className="size-4" />{ranking ? "重排中" : "立即重排"}</Button> : null}
                     {selectedWorkspace ? <IconButton label="分组设置" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" /></IconButton> : null}
+                    {selectedWorkspace ? <Button variant="outline" onClick={() => void handleRanking()} disabled={ranking}><ArrowUpDown className="size-4" />{ranking ? "重排中" : "立即重排"}</Button> : null}
                     {selectedWorkspace ? <Button variant="outline" onClick={() => setBindingRecommendationsOpen(true)}><Sparkles className="size-4" />推荐绑定</Button> : null}
                     <Button onClick={() => { setBindingAccount(null); setMemberOpen(true) }} disabled={!selectedWorkspace}>
                       <Plus className="size-4" />添加账号
@@ -611,6 +611,8 @@ function AccountMenu({ account, canManage, onCheck, onSync, onDelete }: { accoun
 function ScheduleBadge({ account }: { account: MainStationAccount }) {
   if (account.missing) return <Badge variant="destructive">已丢失</Badge>
   if (!account.member) return <Badge variant="outline">未接管</Badge>
+  if (account.member.binding_status === "orphaned") return <Badge variant="destructive">远端已丢失</Badge>
+  if (account.member.binding_status === "invalid") return <Badge variant="destructive">绑定异常</Badge>
   if (account.member.scheduling_dirty_at) return <Badge variant="outline" className="border-amber-300 text-amber-700" title={account.member.last_scheduling_error || "后台正在同步账号启停状态"}>状态同步中</Badge>
   return account.schedulable ? <Badge className="bg-emerald-600 text-white">调度中</Badge> : <Badge variant="secondary">已停用</Badge>
 }
@@ -639,7 +641,7 @@ function SchedulingPriority({ account }: { account: MainStationAccount }) {
     return <span className="tabular-nums">{actualPriority}</span>
   }
   return (
-    <div className="leading-tight" title="系统根据健康状态、人工优先级、成本、连通率和延迟自动调整">
+    <div className="leading-tight" title="相同基础优先级会根据标签、健康、连通率、延迟和成本用间隔值拉开调度顺序">
       <div className="font-medium tabular-nums">{actualPriority}</div>
       <div className="text-xs text-muted-foreground">基础 {basePriority}</div>
     </div>

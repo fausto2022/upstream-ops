@@ -758,6 +758,9 @@ func (c *Client) DeleteAPIKey(ctx context.Context, ch *connector.Channel, sessio
 	if resp.IsError() {
 		return fmt.Errorf("sub2api delete api key: %w", connector.HTTPStatusError(resp.StatusCode(), resp.Body()))
 	}
+	if strings.TrimSpace(string(resp.Body())) == "" {
+		return nil
+	}
 	return decodeSub2Write(resp.Body(), "sub2api delete api key")
 }
 
