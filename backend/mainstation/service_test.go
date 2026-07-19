@@ -485,12 +485,29 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	if err != nil {
 		t.Fatalf("create pool: %v", err)
 	}
-	member, err := service.CreateMember(context.Background(), pool.ID, MemberInput{
+	originalAccount := sub2api.AdminAccount{
+		ID: 88, Name: "OpenAI-01", Status: "active", GroupIDs: []int64{999},
+		Notes: "manual account", Priority: 27, Concurrency: 3,
+	}
+	admin.accounts = append(admin.accounts, originalAccount)
+	input := MemberInput{
 		AccountName: "OpenAI-01", OwnershipMode: "managed", SourceChannelID: channel.ID, SourceGroupID: &sourceGroupID,
 		SourceGroupName: "source-group", Enabled: boolPtr(true), HealthEnabled: boolPtr(true),
 		HealthAPIMode: "openai_chat",
 		Priority:      1, RateConvertMode: "raw", CostAdjustment: 1,
-	})
+	}
+	if _, err := service.CreateMember(context.Background(), pool.ID, input); !errors.Is(err, ErrManagedAccountNameConflict) {
+		t.Fatalf("duplicate managed account name error = %v", err)
+	}
+	members, err := service.store.ListMembers(pool.ID)
+	if err != nil {
+		t.Fatalf("list members after duplicate warning: %v", err)
+	}
+	if len(members) != 0 || len(channels.createdKeys) != 0 || len(admin.createRequests) != 0 || len(admin.accounts) != 1 {
+		t.Fatalf("duplicate warning changed state: members=%#v keys=%#v requests=%#v accounts=%#v", members, channels.createdKeys, admin.createRequests, admin.accounts)
+	}
+	input.AllowNameConflict = true
+	member, err := service.CreateMember(context.Background(), pool.ID, input)
 	if err != nil {
 		t.Fatalf("create managed member: %v", err)
 	}
@@ -499,6 +516,12 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	}
 	if len(channels.createdKeys) != 1 || len(admin.createRequests) != 1 {
 		t.Fatalf("create calls: keys=%d accounts=%d", len(channels.createdKeys), len(admin.createRequests))
+	}
+	if len(admin.accounts) != 2 || admin.accounts[0].ID != originalAccount.ID ||
+		!slices.Equal(admin.accounts[0].GroupIDs, originalAccount.GroupIDs) ||
+		admin.accounts[0].Notes != originalAccount.Notes || admin.accounts[0].Priority != originalAccount.Priority ||
+		admin.accounts[0].Concurrency != originalAccount.Concurrency {
+		t.Fatalf("original duplicate account was modified: got=%#v want=%#v", admin.accounts[0], originalAccount)
 	}
 	if channels.createdKeys[0].Name != "source-group" {
 		t.Fatalf("managed source api key name = %q", channels.createdKeys[0].Name)
@@ -564,6 +587,15 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 	}
 	if len(admin.schedulableCalls) != 3 || admin.schedulableCalls[1] || !admin.schedulableCalls[2] {
 		t.Fatalf("delete schedulable calls = %#v", admin.schedulableCalls)
+	}
+}
+
+func TestManagedMemberMarkerDoesNotMatchAnotherMemberID(t *testing.T) {
+	if hasManagedMemberMarker("RelayDeck managed member:10", 1) {
+		t.Fatal("member 1 marker matched member 10")
+	}
+	if !hasManagedMemberMarker("RelayDeck managed member:10", 10) {
+		t.Fatal("member 10 marker was not recognized")
 	}
 }
 

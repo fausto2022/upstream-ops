@@ -634,12 +634,25 @@ func (s *Service) createBoundMember(poolID uint, in MemberInput) (*storage.MainA
 
 func (s *Service) createManagedMember(ctx context.Context, poolID uint, in MemberInput) (*storage.MainAccountPoolMember, error) {
 	if in.RemoteAccountID != nil {
-		return nil, errors.New("managed member cannot specify remote_account_id")
+		return nil, errors.New("新建托管账号时不能指定已有主站账号")
+	}
+	pool, err := s.store.FindPool(poolID)
+	if err != nil {
+		return nil, err
 	}
 	member := memberFromInput(poolID, in)
 	member.OwnershipMode = "managed"
 	member.BindingStatus = "pending"
 	member.Status = "pending"
+	if !in.AllowNameConflict {
+		conflict, conflictErr := s.managedAccountNameExists(ctx, pool, member)
+		if conflictErr != nil {
+			return nil, conflictErr
+		}
+		if conflict {
+			return nil, fmt.Errorf("%w：%s", ErrManagedAccountNameConflict, managedAccountName(pool, member))
+		}
+	}
 	if err := s.store.CreateMember(member); err != nil {
 		return nil, err
 	}
@@ -697,19 +710,16 @@ func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*stora
 		}
 	}
 	if member.RemoteAccountID == nil {
-		existing, findErr := client.FindAccountByName(ctx, adminTarget, accountName)
+		existing, findErr := findManagedRemoteAccount(ctx, client, adminTarget, accountName, member.ID)
 		if findErr != nil {
 			return nil, s.failManagedMember(member, findErr)
 		}
 		if existing != nil {
-			if !strings.Contains(existing.Notes, fmt.Sprintf("managed member:%d", member.ID)) {
-				return nil, s.failManagedMember(member, errors.New("managed account name is already used by an unrelated remote account"))
-			}
 			remote, err = client.UpdateAccount(ctx, adminTarget, existing.ID, request)
 		} else {
 			remote, err = client.CreateAccount(ctx, adminTarget, request)
 			if err != nil {
-				if recovered, findErr := client.FindAccountByName(ctx, adminTarget, accountName); findErr == nil && recovered != nil && strings.Contains(recovered.Notes, fmt.Sprintf("managed member:%d", member.ID)) {
+				if recovered, findErr := findManagedRemoteAccount(ctx, client, adminTarget, accountName, member.ID); findErr == nil && recovered != nil {
 					remote = recovered
 					err = nil
 				}
@@ -772,6 +782,49 @@ func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*stora
 		s.log.Warn("mark main station scheduling rank dirty", "err", rankingErr, "pool_id", poolID)
 	}
 	return member, nil
+}
+
+func (s *Service) managedAccountNameExists(ctx context.Context, pool *storage.MainAccountPool, member *storage.MainAccountPoolMember) (bool, error) {
+	_, target, adminAPIKey, err := s.loadAdminTarget()
+	if err != nil {
+		return false, err
+	}
+	accounts, err := s.adminFactory().ListAllAccounts(ctx, sub2api.AdminTarget{BaseURL: target.BaseURL, APIKey: adminAPIKey})
+	if err != nil {
+		return false, fmt.Errorf("检查主站同名账号失败：%w", redactSecretError(err, adminAPIKey))
+	}
+	name := managedAccountName(pool, member)
+	for i := range accounts {
+		if strings.EqualFold(accounts[i].Name, name) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func findManagedRemoteAccount(ctx context.Context, client adminClient, target sub2api.AdminTarget, name string, memberID uint) (*sub2api.AdminAccount, error) {
+	accounts, err := client.ListAllAccounts(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	for i := range accounts {
+		if strings.EqualFold(accounts[i].Name, name) && hasManagedMemberMarker(accounts[i].Notes, memberID) {
+			item := accounts[i]
+			return &item, nil
+		}
+	}
+	return nil, nil
+}
+
+func hasManagedMemberMarker(notes string, memberID uint) bool {
+	fields := strings.Fields(notes)
+	marker := fmt.Sprintf("member:%d", memberID)
+	for i := 1; i < len(fields); i++ {
+		if strings.EqualFold(fields[i-1], "managed") && fields[i] == marker {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) syncManagedAccountModels(ctx context.Context, client adminClient, target sub2api.AdminTarget, remoteAccountID int64) error {

@@ -2,9 +2,12 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/fausto2022/relaydeck/backend/mainstation"
 	"github.com/gin-gonic/gin"
@@ -27,7 +30,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 	group.POST("", func(c *gin.Context) {
 		var in mainstation.ConfigInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		item, err := d.MainStation.CreateConfig(c.Request.Context(), in)
@@ -40,7 +43,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 	group.PUT("", func(c *gin.Context) {
 		var in mainstation.ConfigInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		item, err := d.MainStation.UpdateConfig(c.Request.Context(), in)
@@ -55,7 +58,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		if c.Request.ContentLength != 0 {
 			var body mainstation.ConfigInput
 			if err := c.ShouldBindJSON(&body); err != nil {
-				fail(c, http.StatusBadRequest, err)
+				failMainStationRequest(c)
 				return
 			}
 			in = &body
@@ -93,7 +96,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 	group.PUT("/protection", func(c *gin.Context) {
 		var in mainstation.ProtectionPolicyInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		result, err := d.MainStation.UpdateProtectionPolicy(c.Request.Context(), in)
@@ -177,7 +180,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.BindingBatchInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		result, err := d.MainStation.BindMembersBatch(c.Request.Context(), groupID, in)
@@ -194,7 +197,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.GroupSettingsInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		item, err := d.MainStation.UpdateGroupSettings(c.Request.Context(), groupID, in)
@@ -227,7 +230,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.MemberInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		item, err := d.MainStation.CreateMember(c.Request.Context(), poolID, in)
@@ -253,7 +256,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.MemberInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		item, err := d.MainStation.UpdateMember(c.Request.Context(), poolID, memberID, in)
@@ -300,7 +303,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.HealthCheckInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		result, err := d.MainStation.CheckMember(c.Request.Context(), poolID, memberID, in)
@@ -326,7 +329,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.DeleteMemberInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		if err := d.MainStation.DeleteMember(c.Request.Context(), poolID, memberID, in); err != nil {
@@ -347,7 +350,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.HealthCheckInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		result, err := d.MainStation.BulkCheckPool(c.Request.Context(), poolID, in.Level, in.Force)
@@ -461,7 +464,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 		}
 		var in mainstation.GuardLockInput
 		if err := c.ShouldBindJSON(&in); err != nil {
-			fail(c, http.StatusBadRequest, err)
+			failMainStationRequest(c)
 			return
 		}
 		item, err := d.MainStation.ActivateGuardLock(c.Request.Context(), accountID, c.Param("type"), in.Reason, in.Evidence, "admin")
@@ -512,7 +515,7 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 func mainStationUintParam(c *gin.Context, name string) (uint, bool) {
 	value, err := strconv.ParseUint(c.Param(name), 10, 64)
 	if err != nil || value == 0 {
-		fail(c, http.StatusBadRequest, errors.New("invalid "+name))
+		fail(c, http.StatusBadRequest, errors.New("请求路径参数不正确"))
 		return 0, false
 	}
 	return uint(value), true
@@ -521,10 +524,14 @@ func mainStationUintParam(c *gin.Context, name string) (uint, bool) {
 func mainStationInt64Param(c *gin.Context, name string) (int64, bool) {
 	value, err := strconv.ParseInt(c.Param(name), 10, 64)
 	if err != nil || value <= 0 {
-		fail(c, http.StatusBadRequest, errors.New("invalid "+name))
+		fail(c, http.StatusBadRequest, errors.New("请求路径参数不正确"))
 		return 0, false
 	}
 	return value, true
+}
+
+func failMainStationRequest(c *gin.Context) {
+	fail(c, http.StatusBadRequest, errors.New("请求参数格式不正确"))
 }
 
 func queryIntDefault(c *gin.Context, name string, fallback int) int {
@@ -545,12 +552,78 @@ func failMainStation(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, mainstation.ErrNotConfigured):
 		status = http.StatusNotFound
-	case errors.Is(err, mainstation.ErrAlreadyConfigured), errors.Is(err, mainstation.ErrBindingConflict):
+	case errors.Is(err, mainstation.ErrAlreadyConfigured), errors.Is(err, mainstation.ErrBindingConflict), errors.Is(err, mainstation.ErrManagedAccountNameConflict):
 		status = http.StatusConflict
 	case isMainStationValidationError(err):
 		status = http.StatusBadRequest
 	}
-	fail(c, status, err)
+	body := gin.H{"error": mainStationErrorMessage(err)}
+	if errors.Is(err, mainstation.ErrManagedAccountNameConflict) {
+		body["code"] = "managed_account_name_conflict"
+	}
+	c.JSON(status, body)
+}
+
+var mainStationHTTPStatusPattern = regexp.MustCompile(`(?i)(?:status|http)\s+(\d{3})`)
+
+func mainStationErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return "未找到对应的主站数据"
+	case errors.Is(err, mainstation.ErrNotConfigured):
+		return mainstation.ErrNotConfigured.Error()
+	case errors.Is(err, mainstation.ErrAlreadyConfigured):
+		return mainstation.ErrAlreadyConfigured.Error()
+	case errors.Is(err, mainstation.ErrBindingConflict):
+		return mainstation.ErrBindingConflict.Error()
+	case errors.Is(err, mainstation.ErrManagedAccountNameConflict):
+		return "主站已存在同名账号，确认后可以继续新建，原账号不会被覆盖"
+	}
+	text := strings.TrimSpace(err.Error())
+	if match := mainStationHTTPStatusPattern.FindStringSubmatch(text); len(match) == 2 {
+		status, _ := strconv.Atoi(match[1])
+		switch status {
+		case http.StatusBadRequest:
+			return "主站接口拒绝了请求，请检查账号配置"
+		case http.StatusUnauthorized:
+			return "主站接口鉴权失败，请检查管理员 API Key"
+		case http.StatusForbidden:
+			return "主站接口没有执行该操作的权限"
+		case http.StatusNotFound:
+			return "主站中的目标账号或资源不存在"
+		case http.StatusConflict:
+			return "主站数据发生冲突，请刷新后重试"
+		case http.StatusTooManyRequests:
+			return "主站接口请求过于频繁，请稍后重试"
+		default:
+			if status >= 500 {
+				return fmt.Sprintf("主站服务暂时不可用（HTTP %d）", status)
+			}
+			return fmt.Sprintf("主站接口请求失败（HTTP %d）", status)
+		}
+	}
+	translations := []struct {
+		keyword string
+		message string
+	}{
+		{"the same member health check is already running", "该账号正在探测中，请稍后再试"},
+		{"source account concurrency is unavailable", "无法获取上游账号最高并发，请手动填写"},
+		{"sync managed account models from upstream returned no models", "上游没有返回任何可用模型"},
+		{"account pool has no main station groups", "当前账号池没有关联主站分组"},
+		{"selected source group no longer exists", "选择的上游套餐已不存在，请重新选择"},
+		{"remote account is missing", "主站账号已不存在，请刷新列表"},
+		{"member binding is invalid", "账号绑定关系无效，请重新接管"},
+		{"检查主站同名账号失败", "检查主站同名账号失败，请稍后重试"},
+	}
+	for _, item := range translations {
+		if strings.Contains(strings.ToLower(text), item.keyword) {
+			return item.message
+		}
+	}
+	if strings.IndexFunc(text, func(r rune) bool { return unicode.Is(unicode.Han, r) }) >= 0 {
+		return text
+	}
+	return "主站操作失败，请稍后重试"
 }
 
 func isMainStationValidationError(err error) bool {

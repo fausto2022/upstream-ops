@@ -87,7 +87,7 @@ export async function apiFetch<T = unknown>(
     const err: ApiError = Object.assign(
       new Error(
         (body as { error?: string })?.error ??
-          (typeof body === "string" ? body : `HTTP ${res.status}`),
+          (typeof body === "string" ? body : `请求失败（HTTP ${res.status}）`),
       ),
       { status: res.status, body },
     )

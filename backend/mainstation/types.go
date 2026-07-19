@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	ErrNotConfigured     = errors.New("main station is not configured")
-	ErrAlreadyConfigured = errors.New("main station is already configured")
-	ErrBindingConflict   = errors.New("remote account is already bound")
+	ErrNotConfigured              = errors.New("尚未配置主站")
+	ErrAlreadyConfigured          = errors.New("主站已经配置")
+	ErrBindingConflict            = errors.New("该主站账号已被其他记录接管")
+	ErrManagedAccountNameConflict = errors.New("主站已存在同名账号")
 )
 
 type MigrationStateDTO struct {
@@ -183,6 +184,7 @@ type MemberInput struct {
 	SourceAPIKeyID          *int64   `json:"source_api_key_id,omitempty"`
 	RemoteAccountID         *int64   `json:"remote_account_id,omitempty"`
 	ManualBindingConfirmed  bool     `json:"manual_binding_confirmed"`
+	AllowNameConflict       bool     `json:"allow_name_conflict"`
 	Enabled                 *bool    `json:"enabled,omitempty"`
 	Preferred               *bool    `json:"preferred,omitempty"`
 	ProxyID                 *int64   `json:"proxy_id,omitempty"`

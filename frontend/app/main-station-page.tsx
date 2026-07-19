@@ -251,7 +251,7 @@ export default function MainStationPage() {
     setSyncing(true)
     try {
       const result = await apiFetch<MainStationSyncResult>("/main-station/sync", { method: "POST" })
-      toast.success(`已同步 ${result.groups} 个分组、${result.accounts} 个 Account`)
+      toast.success(`已同步 ${result.groups} 个分组、${result.accounts} 个账号`)
       await loadBase()
       await loadAccounts(selectedGroupID)
     } catch (syncError) {
@@ -344,7 +344,7 @@ export default function MainStationPage() {
     const managed = account.member.ownership_mode === "managed"
     const approved = await confirm({
       title: `删除账号“${account.name}”`,
-      description: managed ? "将同时删除主站 Account 和自动创建的来源 API Key。" : "只解除接管关系，主站 Account 和来源 API Key 保持不变。",
+      description: managed ? "将同时删除主站账号和自动创建的来源 API Key。" : "只解除接管关系，主站账号和来源 API Key 保持不变。",
       confirmLabel: "删除",
       destructive: true,
     })
@@ -466,7 +466,7 @@ export default function MainStationPage() {
                       <p className="truncate text-sm font-semibold">{selectedWorkspace?.group.name ?? "全部账号"}</p>
                       {selectedWorkspace ? <Badge variant="outline" className="shrink-0 tabular-nums">倍率 {formatMainStationMultiplier(selectedWorkspace.group.rate_multiplier_micros)}</Badge> : null}
                     </div>
-                    <p className="text-xs text-muted-foreground">{accounts.length} 个 Account</p>
+                    <p className="text-xs text-muted-foreground">{accounts.length} 个账号</p>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {selectedWorkspace ? <IconButton label="分组设置" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" /></IconButton> : null}
@@ -500,7 +500,7 @@ export default function MainStationPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Account</TableHead>
+                        <TableHead>账号</TableHead>
                         <TableHead>状态</TableHead>
                         <TableHead>实际优先级</TableHead>
                         <TableHead>上游倍率</TableHead>
@@ -791,7 +791,7 @@ function schedulingBlockedMessage(decision: MainStationSchedulingDecision) {
     "main station management is disabled": "主站管理已停用，账号暂时无法恢复",
     "account pool is disabled": "当前主站分组已停用，账号暂时无法恢复",
     "pool member is disabled": "当前账号已关闭，需先在账号设置中启用",
-    "remote account status is not active": "主站 Account 状态不是活动状态",
+    "remote account status is not active": "主站账号状态不是活动状态",
     "member binding is invalid": "账号绑定关系无效，暂时无法恢复",
   }
   return reasons[decision.reason] || "账号当前仍不满足调度条件"
@@ -824,13 +824,13 @@ function AuditTable({ items, accounts, empty }: { items: MainStationAuditLog[]; 
   return (
     <div className="overflow-x-auto border">
       <Table>
-        <TableHeader><TableRow><TableHead>时间</TableHead><TableHead>操作</TableHead><TableHead>Account</TableHead><TableHead>来源</TableHead><TableHead>结果</TableHead><TableHead>详情</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>时间</TableHead><TableHead>操作</TableHead><TableHead>账号</TableHead><TableHead>来源</TableHead><TableHead>结果</TableHead><TableHead>详情</TableHead></TableRow></TableHeader>
         <TableBody>
           {items.map((item) => (
             <TableRow key={item.id}>
               <TableCell className="whitespace-nowrap text-xs">{relativeTime(item.created_at)}</TableCell>
               <TableCell>{actionLabel(item.action)}</TableCell>
-              <TableCell>{item.remote_account_id ? `${accounts.find((account) => account.remote_account_id === item.remote_account_id)?.name ?? "Account"} #${item.remote_account_id}` : "-"}</TableCell>
+              <TableCell>{item.remote_account_id ? `${accounts.find((account) => account.remote_account_id === item.remote_account_id)?.name ?? "账号"} #${item.remote_account_id}` : "-"}</TableCell>
               <TableCell>{sourceLabel(item.source)}</TableCell>
               <TableCell>{item.success ? <Badge variant="outline">成功</Badge> : <Badge variant="destructive">失败</Badge>}</TableCell>
               <TableCell className="max-w-80 truncate" title={auditDetail(item.error_message || item.detail)}>{auditDetail(item.error_message || item.detail)}</TableCell>
@@ -860,7 +860,7 @@ function channelName(channels: Channel[], channelID: number) {
 }
 
 function accountDisplayName(accounts: MainStationAccount[], remoteAccountID: number) {
-  return accounts.find((account) => account.remote_account_id === remoteAccountID)?.name ?? "Account"
+  return accounts.find((account) => account.remote_account_id === remoteAccountID)?.name ?? "账号"
 }
 
 function guardLockLabel(lockType: string) {
