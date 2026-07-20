@@ -253,7 +253,9 @@ export default function MainStationPage() {
     setSyncing(true)
     try {
       const result = await apiFetch<MainStationSyncResult>("/main-station/sync", { method: "POST" })
-      toast.success(`已同步 ${result.groups} 个分组、${result.accounts} 个账号`)
+      const bindingDetail = result.source_bindings_updated > 0 ? `，更新 ${result.source_bindings_updated} 个上游 Key 分组` : ""
+      toast.success(`已同步 ${result.groups} 个分组、${result.accounts} 个账号${bindingDetail}`)
+      if (result.source_binding_warnings?.length) toast.warning(result.source_binding_warnings.join("；"))
       await loadBase()
       await loadAccounts(selectedGroupID)
     } catch (syncError) {
@@ -927,6 +929,7 @@ function actionLabel(action: string) {
     member_bind: "接管账号",
     member_bind_batch: "批量接管账号",
     member_managed_sync: "同步账号",
+    member_source_group_sync: "同步上游 Key 分组",
     member_update: "更新账号",
     member_delete: "删除账号",
     member_unbind: "解除接管",

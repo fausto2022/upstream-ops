@@ -110,6 +110,10 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("save main station account snapshots: %w", err))
 	}
+	sourceBindings, err := s.refreshSourceAPIKeyGroups(ctx, source)
+	if err != nil {
+		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("refresh source api key groups: %w", err))
+	}
 	s.syncProfitSnapshots(ctx, client, adminTarget, syncedAt)
 	orphanedMembers, err := s.store.MarkMembersOrphaned(missingAccounts)
 	if err != nil {
@@ -120,11 +124,15 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	}
 	_ = s.targets.UpdateCheck(target.ID, "success", &syncedAt, "")
 	result := &SyncResult{
-		Groups:          len(groups),
-		Accounts:        len(accounts),
-		MissingGroups:   missingGroups,
-		MissingAccounts: missingAccounts,
-		SyncedAt:        syncedAt,
+		Groups:                len(groups),
+		Accounts:              len(accounts),
+		MissingGroups:         missingGroups,
+		MissingAccounts:       missingAccounts,
+		SourceBindingsChecked: sourceBindings.Checked,
+		SourceBindingsUpdated: sourceBindings.Updated,
+		SourceBindingsMissing: sourceBindings.Missing,
+		SourceBindingWarnings: sourceBindings.Warnings,
+		SyncedAt:              syncedAt,
 	}
 	if len(orphanedMembers) > 0 {
 		result.OrphanedMembers = len(orphanedMembers)

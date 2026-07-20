@@ -71,12 +71,16 @@ type HealthModelCatalog struct {
 }
 
 type SyncResult struct {
-	Groups          int       `json:"groups"`
-	Accounts        int       `json:"accounts"`
-	MissingGroups   []int64   `json:"missing_groups"`
-	MissingAccounts []int64   `json:"missing_accounts"`
-	OrphanedMembers int       `json:"orphaned_members"`
-	SyncedAt        time.Time `json:"synced_at"`
+	Groups                int       `json:"groups"`
+	Accounts              int       `json:"accounts"`
+	MissingGroups         []int64   `json:"missing_groups"`
+	MissingAccounts       []int64   `json:"missing_accounts"`
+	OrphanedMembers       int       `json:"orphaned_members"`
+	SourceBindingsChecked int       `json:"source_bindings_checked"`
+	SourceBindingsUpdated int       `json:"source_bindings_updated"`
+	SourceBindingsMissing int       `json:"source_bindings_missing"`
+	SourceBindingWarnings []string  `json:"source_binding_warnings,omitempty"`
+	SyncedAt              time.Time `json:"synced_at"`
 }
 
 type GroupDTO struct {

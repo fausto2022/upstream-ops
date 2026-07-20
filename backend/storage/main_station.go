@@ -422,6 +422,17 @@ func (r *MainStationStore) UpdateMember(item *MainAccountPoolMember) error {
 	return r.db.Save(item).Error
 }
 
+func (r *MainStationStore) UpdateMemberSourceGroup(memberID uint, groupID *int64, groupName string) error {
+	return r.db.Model(&MainAccountPoolMember{}).Where("id = ?", memberID).Updates(map[string]any{
+		"source_group_id":      groupID,
+		"source_group_name":    strings.TrimSpace(groupName),
+		"last_cost_micros":     nil,
+		"last_cost_source":     "",
+		"last_cost_at":         nil,
+		"last_cost_expires_at": nil,
+	}).Error
+}
+
 func (r *MainStationStore) DeleteMember(poolID, memberID uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("member_id = ?", memberID).Delete(&MainAccountGuardLock{}).Error; err != nil {

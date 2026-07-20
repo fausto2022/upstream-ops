@@ -161,6 +161,7 @@ type fakeChannelService struct {
 	revealKeyErr error
 	groups       []connector.APIKeyGroup
 	keys         []connector.APIKey
+	listKeysErr  error
 	createdKeys  []connector.APIKeyCreateRequest
 	createdKeyID int64
 	deletedKeys  []int64
@@ -190,6 +191,9 @@ func (f *fakeChannelService) ListAPIKeyGroups(context.Context, uint) ([]connecto
 	return append([]connector.APIKeyGroup(nil), f.groups...), nil
 }
 func (f *fakeChannelService) ListAPIKeys(context.Context, uint, connector.APIKeyQuery) (*connector.APIKeyPage, error) {
+	if f.listKeysErr != nil {
+		return nil, f.listKeysErr
+	}
 	return &connector.APIKeyPage{Items: append([]connector.APIKey(nil), f.keys...), Total: int64(len(f.keys)), Page: 1, PageSize: 100, Pages: 1}, nil
 }
 func (f *fakeChannelService) GetAccountLimits(context.Context, uint) (*connector.AccountLimits, error) {

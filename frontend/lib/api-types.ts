@@ -927,6 +927,10 @@ export interface MainStationSyncResult {
   missing_groups: number[]
   missing_accounts: number[]
   orphaned_members: number
+  source_bindings_checked: number
+  source_bindings_updated: number
+  source_bindings_missing: number
+  source_binding_warnings?: string[]
   synced_at: string
 }
 
