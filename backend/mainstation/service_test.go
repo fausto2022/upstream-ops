@@ -580,7 +580,7 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 		t.Fatalf("create pool: %v", err)
 	}
 	originalAccount := sub2api.AdminAccount{
-		ID: 88, Name: "OpenAI-01", Status: "active", GroupIDs: []int64{999},
+		ID: 88, Name: "source-source-group", Status: "active", GroupIDs: []int64{999},
 		Notes: "manual account", Priority: 27, Concurrency: 3,
 	}
 	admin.accounts = append(admin.accounts, originalAccount)
@@ -617,11 +617,11 @@ func TestManagedMemberCreatesIndependentValidatedAccountAndPreservesRemoteByDefa
 		admin.accounts[0].Concurrency != originalAccount.Concurrency {
 		t.Fatalf("original duplicate account was modified: got=%#v want=%#v", admin.accounts[0], originalAccount)
 	}
-	if channels.createdKeys[0].Name != "source-group" {
+	if channels.createdKeys[0].Name != "source-source-group" {
 		t.Fatalf("managed source api key name = %q", channels.createdKeys[0].Name)
 	}
 	request := admin.createRequests[0]
-	if request.Name != "OpenAI-01" {
+	if request.Name != "source-source-group" || member.AccountName != request.Name {
 		t.Fatalf("managed account name = %q", request.Name)
 	}
 	if request.Credentials["api_key"] != channels.secret || request.Credentials["base_url"] != channel.SiteURL {
@@ -722,12 +722,22 @@ func TestEnsureManagedSourceAPIKeyRecreatesMissingRemoteKey(t *testing.T) {
 	if secret != channels.secret || member.SourceAPIKeyID == nil || *member.SourceAPIKeyID != 88 {
 		t.Fatalf("recreated key: secret=%q member=%#v", secret, member)
 	}
-	if len(channels.createdKeys) != 1 || channels.createdKeys[0].Name != "source-group" {
+	if len(channels.createdKeys) != 1 || channels.createdKeys[0].Name != "source-source-group" {
 		t.Fatalf("created keys = %#v", channels.createdKeys)
 	}
 	stored, err := service.store.FindMember(pool.ID, member.ID)
-	if err != nil || stored.SourceAPIKeyID == nil || *stored.SourceAPIKeyID != 88 {
+	if err != nil || stored.SourceAPIKeyID == nil || *stored.SourceAPIKeyID != 88 || stored.AccountName != "source-source-group" {
 		t.Fatalf("stored member = %#v, err=%v", stored, err)
+	}
+}
+
+func TestManagedAutomaticNameUsesChannelAndDefaultGroup(t *testing.T) {
+	service, db, _, _ := newTestService(t)
+	channel := createTestChannel(t, db)
+	pool := &storage.MainAccountPool{Name: "main-pool"}
+	member := &storage.MainAccountPoolMember{SourceChannelID: channel.ID}
+	if got := service.managedAutomaticName(pool, member); got != "source-默认分组" {
+		t.Fatalf("automatic managed name = %q", got)
 	}
 }
 

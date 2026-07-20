@@ -68,6 +68,9 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
   const [busy, setBusy] = useState(false)
   const sourceRequestRef = useRef(0)
   const selectedChannel = channels.find((channel) => channel.id === channelID)
+  const selectedSourceGroup = sourceGroups.find((group) => groupValue(group) === sourceGroupValue)
+  const usesGeneratedAPIKey = mode === "managed" && sourceKeyValue === "new"
+  const generatedAccountName = automaticManagedName(selectedChannel?.name, selectedSourceGroup?.name)
   const defaultSourceRatio = applyChannelRechargeMultiplier(1, selectedChannel)
 
   useEffect(() => {
@@ -171,7 +174,8 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
       toast.error("请选择账号来源")
       return
     }
-    if (mode === "managed" && !accountName.trim()) {
+    const submittedAccountName = usesGeneratedAPIKey ? generatedAccountName : accountName.trim()
+    if (mode === "managed" && !submittedAccountName) {
       toast.error("请输入账号名称")
       return
     }
@@ -187,7 +191,6 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
       toast.error("优先级必须大于 0")
       return
     }
-    const selectedGroup = sourceGroups.find((group) => groupValue(group) === sourceGroupValue)
     let allowNameConflict = false
     while (true) {
       setBusy(true)
@@ -195,11 +198,11 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
         const member = await apiFetch<MainStationMember>(`/main-station/groups/${workspace.group.id}/accounts`, {
           method: "POST",
           body: JSON.stringify({
-            account_name: mode === "managed" ? accountName.trim() : "",
+            account_name: mode === "managed" ? submittedAccountName : "",
             ownership_mode: mode,
             source_channel_id: channelID,
-            source_group_id: selectedGroup?.id ?? undefined,
-            source_group_name: selectedGroup?.name ?? "",
+            source_group_id: selectedSourceGroup?.id ?? undefined,
+            source_group_name: selectedSourceGroup?.name ?? "",
             source_api_key_id: sourceKeyValue !== "new" && sourceKeyValue !== "none" ? Number(sourceKeyValue) : undefined,
             remote_account_id: mode === "bound" ? remoteAccountID : undefined,
             manual_binding_confirmed: mode === "bound" ? manualConfirmed : false,
@@ -263,7 +266,13 @@ export function MemberDialog({ open, onOpenChange, workspace, channels, accounts
               {mode === "managed" ? (
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="account-name">账号名称</Label>
-                  <Input id="account-name" value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder="例如 OpenAI-01" />
+                  <Input
+                    id="account-name"
+                    value={usesGeneratedAPIKey ? generatedAccountName : accountName}
+                    onChange={(event) => setAccountName(event.target.value)}
+                    placeholder="例如 OpenAI-01"
+                    readOnly={usesGeneratedAPIKey}
+                  />
                 </div>
               ) : (
                 <div className="space-y-2 sm:col-span-2">
@@ -370,6 +379,12 @@ function isManagedAccountNameConflict(error: unknown) {
 
 function groupValue(group: ChannelAPIKeyGroup) {
   return group.id != null ? `id:${group.id}` : `name:${group.name}`
+}
+
+function automaticManagedName(channelName?: string, groupName?: string) {
+  const channel = channelName?.trim() ?? ""
+  const group = groupName?.trim() || "默认分组"
+  return `${channel}${channel ? "-" : ""}${group}`.trim().replace(/\s+/g, "-").slice(0, 120)
 }
 
 function applyChannelRechargeMultiplier(value: number, channel?: Channel) {

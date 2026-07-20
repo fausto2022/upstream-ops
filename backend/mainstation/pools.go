@@ -811,6 +811,9 @@ func (s *Service) createManagedMember(ctx context.Context, poolID uint, in Membe
 	member.OwnershipMode = "managed"
 	member.BindingStatus = "pending"
 	member.Status = "pending"
+	if member.SourceAPIKeyID == nil {
+		member.AccountName = s.managedAutomaticName(pool, member)
+	}
 	if !in.AllowNameConflict {
 		conflict, conflictErr := s.managedAccountNameExists(ctx, pool, member)
 		if conflictErr != nil {
@@ -1063,7 +1066,7 @@ func (s *Service) ensureManagedSourceAPIKey(ctx context.Context, pool *storage.M
 		}
 		member.SourceAPIKeyID = nil
 	}
-	name := managedSourceAPIKeyName(pool, member)
+	name := s.managedAutomaticName(pool, member)
 	key, err := s.channelSvc.CreateAPIKey(ctx, member.SourceChannelID, connector.APIKeyCreateRequest{
 		Name:    name,
 		Group:   member.SourceGroupName,
@@ -1073,6 +1076,7 @@ func (s *Service) ensureManagedSourceAPIKey(ctx context.Context, pool *storage.M
 		return "", fmt.Errorf("create managed source api key: %w", err)
 	}
 	keyID := key.ID
+	member.AccountName = name
 	member.SourceAPIKeyID = &keyID
 	if err := s.store.UpdateMember(member); err != nil {
 		return "", err
@@ -1301,16 +1305,32 @@ func managedAccountName(pool *storage.MainAccountPool, member *storage.MainAccou
 	return compactName(pool.Name, 120)
 }
 
-func managedSourceAPIKeyName(pool *storage.MainAccountPool, member *storage.MainAccountPoolMember) string {
-	if member != nil {
-		if name := strings.TrimSpace(member.SourceGroupName); name != "" {
-			return truncateManagedName(name, 120)
-		}
-		if name := strings.TrimSpace(member.AccountName); name != "" {
-			return truncateManagedName(name, 120)
+func (s *Service) managedAutomaticName(pool *storage.MainAccountPool, member *storage.MainAccountPoolMember) string {
+	channelName := ""
+	if member != nil && s.channels != nil {
+		if channel, err := s.channels.FindByID(member.SourceChannelID); err == nil {
+			channelName = strings.TrimSpace(channel.Name)
 		}
 	}
-	return truncateManagedName(pool.Name, 120)
+	groupName := ""
+	if member != nil {
+		groupName = strings.TrimSpace(member.SourceGroupName)
+		if groupName == "" && member.SourceGroupID != nil {
+			groupName = fmt.Sprintf("分组-%d", *member.SourceGroupID)
+		}
+	}
+	if groupName == "" {
+		groupName = "默认分组"
+	}
+	if channelName != "" {
+		return compactName(channelName+"-"+groupName, 120)
+	}
+	if member != nil {
+		if name := strings.TrimSpace(member.AccountName); name != "" {
+			return compactName(name, 120)
+		}
+	}
+	return compactName(pool.Name+"-"+groupName, 120)
 }
 
 func missingRemoteResource(err error) bool {
@@ -1321,18 +1341,6 @@ func compactName(value string, max int) string {
 	value = strings.Join(strings.Fields(strings.TrimSpace(value)), "-")
 	if value == "" {
 		value = "pool"
-	}
-	runes := []rune(value)
-	if len(runes) > max {
-		return string(runes[:max])
-	}
-	return value
-}
-
-func truncateManagedName(value string, max int) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		value = "默认分组"
 	}
 	runes := []rune(value)
 	if len(runes) > max {
