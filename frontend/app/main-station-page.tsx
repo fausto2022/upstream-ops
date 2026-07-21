@@ -770,9 +770,11 @@ function SourceGroupRate({ account, showProfit }: { account: MainStationAccount;
     return <span className="text-muted-foreground" title={`来源分组：${groupName}；暂无倍率快照`}>-</span>
   }
   const observedAt = member.source_group_rate_observed_at ? `倍率采集于 ${relativeTime(member.source_group_rate_observed_at)}` : "默认分组倍率"
-  const profit = showProfit ? member.latest_profit : null
+  const profit = showProfit ? (member.current_profit ?? member.latest_profit) : null
+  const usingCurrentProfit = member.current_profit != null
   const profitEvaluated = profit != null && (profit.status === "healthy" || profit.status === "risk") && profit.sale_multiplier_micros > 0 && profit.cost_multiplier_micros > 0
   const marginPercent = profitEvaluated ? profit.margin_basis_points / 100 : null
+  const minimumMarginPercent = profit ? profit.minimum_margin_basis_points / 100 : null
   const marginText = marginPercent == null ? "待评估" : `${marginPercent > 0 ? "+" : ""}${marginPercent.toFixed(1)}%`
   const marginClassName = marginPercent == null
     ? "text-muted-foreground"
@@ -802,7 +804,10 @@ function SourceGroupRate({ account, showProfit }: { account: MainStationAccount;
             <div>主站销售倍率：{formatMainStationMultiplier(profit.sale_multiplier_micros)}</div>
             <div>有效成本倍率：{formatMainStationMultiplier(profit.cost_multiplier_micros)}</div>
             <div>利润率：{marginText}</div>
-            <div>评估时间：{dateTime(profit.observed_at)}</div>
+            {minimumMarginPercent != null ? <div>最低利润要求：{minimumMarginPercent.toFixed(1)}%</div> : null}
+            <div>利润判定：{profit.status === "risk" ? "利润不足" : "正常"}</div>
+            <div>计算公式：（主站倍率 - 有效成本倍率）÷ 主站倍率</div>
+            <div>{usingCurrentProfit ? "实时计算" : "最近评估"}：{dateTime(profit.observed_at)}</div>
           </>
         ) : (
           <div>利润率：等待后台完成利润评估</div>

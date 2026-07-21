@@ -73,6 +73,7 @@ type HealthModelCatalog struct {
 type SyncResult struct {
 	Groups                int       `json:"groups"`
 	Accounts              int       `json:"accounts"`
+	PricingChanged        bool      `json:"pricing_changed"`
 	MissingGroups         []int64   `json:"missing_groups"`
 	MissingAccounts       []int64   `json:"missing_accounts"`
 	OrphanedMembers       int       `json:"orphaned_members"`
@@ -95,11 +96,15 @@ type AccountDTO struct {
 }
 
 type AccountProfitDTO struct {
-	Status               string    `json:"status"`
-	SaleMultiplierMicros int64     `json:"sale_multiplier_micros"`
-	CostMultiplierMicros int64     `json:"cost_multiplier_micros"`
-	MarginBasisPoints    int64     `json:"margin_basis_points"`
-	ObservedAt           time.Time `json:"observed_at"`
+	Status                   string    `json:"status"`
+	SaleMultiplierMicros     int64     `json:"sale_multiplier_micros"`
+	CostMultiplierMicros     int64     `json:"cost_multiplier_micros"`
+	MarginBasisPoints        int64     `json:"margin_basis_points"`
+	MinimumMarginBasisPoints int64     `json:"minimum_margin_basis_points"`
+	SaleSource               string    `json:"sale_source,omitempty"`
+	CostSource               string    `json:"cost_source,omitempty"`
+	Reason                   string    `json:"reason,omitempty"`
+	ObservedAt               time.Time `json:"observed_at"`
 }
 
 type AccountMemberDTO struct {
@@ -115,6 +120,7 @@ type AccountMemberDTO struct {
 	SourceGroupName           string            `json:"source_group_name,omitempty"`
 	SourceGroupRateMultiplier *float64          `json:"source_group_rate_multiplier,omitempty"`
 	SourceGroupRateObservedAt *time.Time        `json:"source_group_rate_observed_at,omitempty"`
+	CurrentProfit             *AccountProfitDTO `json:"current_profit,omitempty"`
 	LatestProfit              *AccountProfitDTO `json:"latest_profit,omitempty"`
 	SourceAPIKeyID            *int64            `json:"source_api_key_id,omitempty"`
 	Weight                    int               `json:"weight"`

@@ -128,6 +128,31 @@ func TestProfitEvaluationTreatsMinimumPositiveMarginAsHealthy(t *testing.T) {
 	}
 }
 
+func TestProfitEvaluationPrefersBoundSourceGroupRate(t *testing.T) {
+	service, db, admin, _ := newTestService(t)
+	current := time.Date(2026, 7, 21, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	service.now = func() time.Time { return current }
+	pool, member, _ := createProfitMember(
+		t, service, db, admin, current, 0.8,
+		`{"mode":"observe","minimum_margin_basis_points":0,"risk_confirmations":2,"cost_max_age_minutes":60}`,
+	)
+	probe := `{"effective_rate_multiplier":0.2,"observed_at":"2026-07-21T12:00:00+08:00"}`
+	if err := db.Model(&storage.MainStationAccountSnapshot{}).
+		Where("remote_account_id = ?", *member.RemoteAccountID).
+		Update("billing_probe_json", probe).Error; err != nil {
+		t.Fatalf("save billing probe: %v", err)
+	}
+
+	result, err := service.EvaluatePool(context.Background(), pool.ID, "manual")
+	if err != nil {
+		t.Fatalf("evaluate source group cost: %v", err)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].CostMultiplierMicros != 800000 ||
+		result.Checks[0].MarginBasisPoints != 2000 || result.Checks[0].CostSource != "source_rate_snapshot" {
+		t.Fatalf("source group cost was not preferred: %#v", result.Checks)
+	}
+}
+
 func TestUnsupportedPricingAllowsStandardUsageGroups(t *testing.T) {
 	for _, subscriptionType := range []string{"", "standard", "usage", "token", "payg"} {
 		group := &storage.UpstreamSyncTargetGroup{SubscriptionType: subscriptionType}

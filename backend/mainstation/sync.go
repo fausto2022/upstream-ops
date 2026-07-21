@@ -18,19 +18,24 @@ func (s *Service) Sync(ctx context.Context) (*SyncResult, error) {
 	return s.sync(ctx, "manual")
 }
 
-func (s *Service) SyncForScheduler(ctx context.Context) {
+func (s *Service) SyncForScheduler(ctx context.Context) bool {
 	s.syncScheduleMu.Lock()
 	defer s.syncScheduleMu.Unlock()
 	config, err := s.store.GetConfig()
 	if err != nil || !config.Enabled {
-		return
+		return false
 	}
 	if config.LastSyncAt != nil && s.now().Sub(*config.LastSyncAt) < time.Duration(normalizedSyncInterval(config.SyncIntervalSeconds))*time.Second {
-		return
+		return false
 	}
-	if _, err := s.sync(ctx, "scheduler"); err != nil && s.log != nil {
-		s.log.Warn("scheduled main station sync", "err", err)
+	result, err := s.sync(ctx, "scheduler")
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("scheduled main station sync", "err", err)
+		}
+		return false
 	}
+	return result.PricingChanged
 }
 
 func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) {
@@ -49,6 +54,15 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("sync main station accounts: %w", err))
 	}
+	existingGroups, err := s.targetGroups.ListByTarget(target.ID, true)
+	if err != nil {
+		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("load existing main station groups: %w", err))
+	}
+	existingByRemoteID := make(map[int64]storage.UpstreamSyncTargetGroup, len(existingGroups))
+	for i := range existingGroups {
+		existingByRemoteID[existingGroups[i].RemoteGroupID] = existingGroups[i]
+	}
+	pricingChanged := false
 
 	remoteGroupIDs := make([]int64, 0, len(groups))
 	for _, group := range groups {
@@ -93,6 +107,10 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 			Missing:              false,
 			LastSyncAt:           &syncedAt,
 		}
+		previous, exists := existingByRemoteID[group.ID]
+		if !exists || mainStationGroupPricingChanged(&previous, item) {
+			pricingChanged = true
+		}
 		if err := s.targetGroups.Upsert(item); err != nil {
 			return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("save main station group %d: %w", group.ID, err))
 		}
@@ -100,6 +118,9 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	missingGroups, err := s.targetGroups.MarkMissing(target.ID, remoteGroupIDs, syncedAt)
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("mark missing main station groups: %w", err))
+	}
+	if len(missingGroups) > 0 {
+		pricingChanged = true
 	}
 
 	snapshots := make([]storage.MainStationAccountSnapshot, 0, len(accounts))
@@ -114,6 +135,10 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("refresh source api key groups: %w", err))
 	}
+	if sourceBindings.Updated > 0 || sourceBindings.Missing > 0 ||
+		sourceBindings.Renamed > 0 || sourceBindings.Cleaned > 0 {
+		pricingChanged = true
+	}
 	s.syncProfitSnapshots(ctx, client, adminTarget, syncedAt)
 	orphanedMembers, err := s.store.MarkMembersOrphaned(missingAccounts)
 	if err != nil {
@@ -126,6 +151,7 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	result := &SyncResult{
 		Groups:                len(groups),
 		Accounts:              len(accounts),
+		PricingChanged:        pricingChanged,
 		MissingGroups:         missingGroups,
 		MissingAccounts:       missingAccounts,
 		SourceBindingsChecked: sourceBindings.Checked,
@@ -145,6 +171,31 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	}
 	_ = s.appendAudit(nil, nil, nil, "main_station_sync", source, true, nil, result, nil, "", "")
 	return result, nil
+}
+
+func mainStationGroupPricingChanged(previous, current *storage.UpstreamSyncTargetGroup) bool {
+	if previous == nil || current == nil {
+		return true
+	}
+	return previous.RateMultiplierMicros != current.RateMultiplierMicros ||
+		!optionalInt64Equal(previous.UserMinRateMicros, current.UserMinRateMicros) ||
+		previous.UserRatesComplete != current.UserRatesComplete ||
+		previous.PeakEnabled != current.PeakEnabled ||
+		previous.PeakStart != current.PeakStart ||
+		previous.PeakEnd != current.PeakEnd ||
+		previous.PeakMultiplierMicros != current.PeakMultiplierMicros ||
+		previous.SubscriptionType != current.SubscriptionType ||
+		previous.ImageSeparateRate != current.ImageSeparateRate ||
+		previous.VideoSeparateRate != current.VideoSeparateRate ||
+		previous.Status != current.Status ||
+		previous.Missing != current.Missing
+}
+
+func optionalInt64Equal(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func (s *Service) recordSyncFailure(target *storage.UpstreamSyncTarget, apiKey, source string, syncErr error) error {

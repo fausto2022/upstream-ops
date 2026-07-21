@@ -39,7 +39,7 @@ type Scheduler struct {
 type mainStationHealthService interface {
 	RunDueHealthChecks(ctx context.Context)
 	CleanupTemporaryAPIKeys(ctx context.Context)
-	SyncForScheduler(ctx context.Context)
+	SyncForScheduler(ctx context.Context) bool
 	RunDueSchedulingReconciles(ctx context.Context)
 	RunDueRankings(ctx context.Context)
 	RunProfitEvaluation(ctx context.Context)
@@ -127,7 +127,9 @@ func (s *Scheduler) runMainStationHealth() {
 	defer cancel()
 	s.mainStation.RunDueHealthChecks(ctx)
 	s.mainStation.CleanupTemporaryAPIKeys(ctx)
-	s.mainStation.SyncForScheduler(ctx)
+	if s.mainStation.SyncForScheduler(ctx) {
+		s.mainStation.RunProfitEvaluation(ctx)
+	}
 	s.mainStation.RunDueSchedulingReconciles(ctx)
 	s.mainStation.RunDueRankings(ctx)
 }

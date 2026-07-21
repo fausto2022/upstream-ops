@@ -146,6 +146,17 @@ func (s *Service) ListGroupAccounts(groupID uint, includeMissing bool) ([]Accoun
 	if err != nil {
 		return nil, err
 	}
+	pool, err := s.poolForGroup(group)
+	if err != nil {
+		return nil, err
+	}
+	config, err := s.store.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	policy := parseMarginPolicy(pool.MarginPolicyJSON)
+	policy.MinimumMarginBasisPoints = effectiveMinimumMarginBasisPoints(config, pool)
+	now := s.now()
 	items, err := s.store.ListAllAccountSnapshots(includeMissing)
 	if err != nil {
 		return nil, err
@@ -155,16 +166,16 @@ func (s *Service) ListGroupAccounts(groupID uint, includeMissing bool) ([]Accoun
 		if accountBelongsToRemoteGroup(&items[i], group.RemoteGroupID) {
 			dto := s.accountDTO(items[i])
 			if dto.Member != nil {
+				member, memberErr := s.store.FindMemberByRemoteAccountID(items[i].RemoteAccountID)
+				if memberErr != nil {
+					return nil, memberErr
+				}
+				current := s.buildProfitCheck(pool, member, group, s.resolveMemberCost(member, policy, now), policy, now)
+				dto.Member.CurrentProfit = accountProfitDTO(current, policy.MinimumMarginBasisPoints)
 				check, checkErr := s.store.LatestProfitCheck(dto.Member.ID, group.ID)
 				switch {
 				case checkErr == nil:
-					dto.Member.LatestProfit = &AccountProfitDTO{
-						Status:               check.Status,
-						SaleMultiplierMicros: check.SaleMultiplierMicros,
-						CostMultiplierMicros: check.CostMultiplierMicros,
-						MarginBasisPoints:    check.MarginBasisPoints,
-						ObservedAt:           check.ObservedAt,
-					}
+					dto.Member.LatestProfit = accountProfitDTO(*check, policy.MinimumMarginBasisPoints)
 				case !errors.Is(checkErr, gorm.ErrRecordNotFound):
 					return nil, checkErr
 				}
@@ -173,6 +184,20 @@ func (s *Service) ListGroupAccounts(groupID uint, includeMissing bool) ([]Accoun
 		}
 	}
 	return result, nil
+}
+
+func accountProfitDTO(check storage.MainAccountProfitCheck, minimumMarginBasisPoints int64) *AccountProfitDTO {
+	return &AccountProfitDTO{
+		Status:                   check.Status,
+		SaleMultiplierMicros:     check.SaleMultiplierMicros,
+		CostMultiplierMicros:     check.CostMultiplierMicros,
+		MarginBasisPoints:        check.MarginBasisPoints,
+		MinimumMarginBasisPoints: minimumMarginBasisPoints,
+		SaleSource:               check.SaleSource,
+		CostSource:               check.CostSource,
+		Reason:                   check.Reason,
+		ObservedAt:               check.ObservedAt,
+	}
 }
 
 func (s *Service) GroupPoolID(groupID uint) (uint, error) {

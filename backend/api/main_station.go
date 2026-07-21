@@ -83,6 +83,9 @@ func registerMainStation(g *gin.RouterGroup, d *Deps) {
 			failMainStation(c, err)
 			return
 		}
+		if result.PricingChanged {
+			d.MainStation.RunProfitEvaluation(c.Request.Context())
+		}
 		c.JSON(http.StatusOK, result)
 	})
 	group.GET("/health-models", func(c *gin.Context) {

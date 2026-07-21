@@ -400,6 +400,7 @@ func refreshRates(c *gin.Context, d *Deps) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
+			d.MainStation.RunProfitEvaluation(ctx)
 			d.MainStation.RunAutoExpansion(ctx)
 		}()
 	}
@@ -963,6 +964,9 @@ func syncChannel(c *gin.Context, d *Deps) {
 		subErr = d.Monitor.CheckSubscriptionUsageAlerts(ctx, ch)
 	}
 	rateErr := d.Monitor.RefreshRates(ctx, ch)
+	if rateErr == nil && d.MainStation != nil {
+		d.MainStation.RunProfitEvaluation(ctx)
+	}
 
 	switch {
 	case balErr != nil || subErr != nil || rateErr != nil:
@@ -983,6 +987,7 @@ func syncAllChannels(c *gin.Context, d *Deps) {
 	baseCtx := c.Request.Context()
 	total := len(list)
 	var successCount, failedCount int
+	ratesRefreshed := false
 
 	if total == 0 {
 		obs.Emit(progress.Event{
@@ -1012,6 +1017,9 @@ func syncAllChannels(c *gin.Context, d *Deps) {
 			subscriptionErr = d.Monitor.CheckSubscriptionUsageAlerts(ctx, &ch)
 		}
 		rateErr := d.Monitor.RefreshRates(ctx, &ch)
+		if rateErr == nil {
+			ratesRefreshed = true
+		}
 		if balanceErr != nil || subscriptionErr != nil || rateErr != nil {
 			failedCount++
 			scoped.Emit(progress.Event{
@@ -1028,6 +1036,9 @@ func syncAllChannels(c *gin.Context, d *Deps) {
 			Message: "同步完成",
 			Time:    time.Now(),
 		})
+	}
+	if ratesRefreshed && d.MainStation != nil {
+		d.MainStation.RunProfitEvaluation(baseCtx)
 	}
 
 	summary := fmt.Sprintf("批量同步完成：成功 %d，失败 %d", successCount, failedCount)

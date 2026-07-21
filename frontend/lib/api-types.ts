@@ -762,6 +762,10 @@ export interface MainStationAccountProfit {
   sale_multiplier_micros: number
   cost_multiplier_micros: number
   margin_basis_points: number
+  minimum_margin_basis_points: number
+  sale_source?: string
+  cost_source?: string
+  reason?: string
   observed_at: string
 }
 
@@ -778,6 +782,7 @@ export interface MainStationAccountMember {
   source_group_name?: string
   source_group_rate_multiplier?: number | null
   source_group_rate_observed_at?: string | null
+  current_profit?: MainStationAccountProfit | null
   latest_profit?: MainStationAccountProfit | null
   source_api_key_id?: number | null
   weight: number
@@ -925,6 +930,7 @@ export interface MainStationPage<T> {
 export interface MainStationSyncResult {
   groups: number
   accounts: number
+  pricing_changed: boolean
   missing_groups: number[]
   missing_accounts: number[]
   orphaned_members: number

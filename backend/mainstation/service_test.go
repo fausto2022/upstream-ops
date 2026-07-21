@@ -458,6 +458,12 @@ func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
 		!accounts[0].Member.LatestProfit.ObservedAt.Equal(profitObservedAt) {
 		t.Fatalf("latest profit = %#v", accounts[0].Member.LatestProfit)
 	}
+	if accounts[0].Member.CurrentProfit == nil || accounts[0].Member.CurrentProfit.Status != "healthy" ||
+		accounts[0].Member.CurrentProfit.SaleMultiplierMicros != 1000000 ||
+		accounts[0].Member.CurrentProfit.CostMultiplierMicros != 75000 ||
+		accounts[0].Member.CurrentProfit.MarginBasisPoints != 9250 {
+		t.Fatalf("current profit = %#v", accounts[0].Member.CurrentProfit)
+	}
 
 	updatedAt := time.Now().Truncate(time.Second)
 	if _, err := service.rates.Upsert(&storage.RateSnapshot{
@@ -468,6 +474,30 @@ func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
 	accounts, err = service.ListGroupAccounts(groups[0].ID, false)
 	if err != nil || accounts[0].Member.SourceGroupRateMultiplier == nil || *accounts[0].Member.SourceGroupRateMultiplier != 0.11 {
 		t.Fatalf("updated source group rate: accounts=%#v err=%v", accounts, err)
+	}
+	if accounts[0].Member.CurrentProfit == nil || accounts[0].Member.CurrentProfit.CostMultiplierMicros != 110000 ||
+		accounts[0].Member.CurrentProfit.MarginBasisPoints != 8900 {
+		t.Fatalf("updated current profit = %#v", accounts[0].Member.CurrentProfit)
+	}
+}
+
+func TestMainStationSyncReportsPricingChanges(t *testing.T) {
+	service, _, admin, _ := newTestService(t)
+	configureTestStation(t, service)
+	admin.groups = []sub2api.AdminGroup{{ID: 11, Name: "main", RateMultiplier: 1, Status: "active"}}
+
+	first, err := service.Sync(context.Background())
+	if err != nil || !first.PricingChanged {
+		t.Fatalf("first sync = %#v, err=%v", first, err)
+	}
+	unchanged, err := service.Sync(context.Background())
+	if err != nil || unchanged.PricingChanged {
+		t.Fatalf("unchanged sync = %#v, err=%v", unchanged, err)
+	}
+	admin.groups[0].RateMultiplier = 0.8
+	changed, err := service.Sync(context.Background())
+	if err != nil || !changed.PricingChanged {
+		t.Fatalf("changed sync = %#v, err=%v", changed, err)
 	}
 }
 
