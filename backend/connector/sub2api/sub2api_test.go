@@ -2,7 +2,15 @@ package sub2api
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,6 +75,110 @@ func TestLoginAddsExtraParams(t *testing.T) {
 	}
 }
 
+func TestLoginUsesBrowserCredentialEnvelope(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	publicDER, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal public key: %v", err)
+	}
+	now := time.Now().Unix()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/auth/credential-key", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "sub2api_auth_flow", Value: "flow-token", Path: "/api/v1/auth"})
+		_, _ = w.Write([]byte(fmt.Sprintf(
+			`{"code":0,"message":"success","data":{"algorithm":"%s","key_id":"key-1","public_key":"%s","expires_at":%d,"flow_expires_at":%d,"server_time":%d}}`,
+			browserCredentialAlgorithm,
+			base64.StdEncoding.EncodeToString(publicDER),
+			now+300,
+			now+300,
+			now,
+		)))
+	})
+	mux.HandleFunc("/api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("sub2api_auth_flow")
+		if err != nil || cookie.Value != "flow-token" {
+			t.Fatalf("flow cookie = %#v, err = %v", cookie, err)
+		}
+		var body map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if _, ok := body["email"]; ok {
+			t.Fatal("plaintext email was sent")
+		}
+		if _, ok := body["password"]; ok {
+			t.Fatal("plaintext password was sent")
+		}
+		var envelope browserCredentialEnvelope
+		if err := json.Unmarshal(body["credential_envelope"], &envelope); err != nil {
+			t.Fatalf("decode envelope: %v", err)
+		}
+		credentials := decryptCredentialEnvelopeForTest(t, privateKey, &envelope)
+		if credentials.Email != "u" || credentials.Password != "p" || credentials.IssuedAt != now {
+			t.Fatalf("credentials = %#v", credentials)
+		}
+		_, _ = w.Write([]byte(`{"code":0,"message":"success","data":{"access_token":"token","expires_in":3600}}`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	session, err := New().Login(context.Background(), &connector.Channel{SiteURL: server.URL, Username: "u", Password: "p"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if session.AccessToken != "token" {
+		t.Fatalf("session = %#v", session)
+	}
+}
+
+func decryptCredentialEnvelopeForTest(
+	t *testing.T,
+	privateKey *rsa.PrivateKey,
+	envelope *browserCredentialEnvelope,
+) struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	IssuedAt int64  `json:"issued_at"`
+} {
+	t.Helper()
+	decode := func(value string) []byte {
+		decoded, err := base64.RawURLEncoding.DecodeString(value)
+		if err != nil {
+			t.Fatalf("decode base64url: %v", err)
+		}
+		return decoded
+	}
+	aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, decode(envelope.EncryptedKey), nil)
+	if err != nil {
+		t.Fatalf("decrypt AES key: %v", err)
+	}
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		t.Fatalf("create AES cipher: %v", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatalf("create AES-GCM: %v", err)
+	}
+	plaintext, err := gcm.Open(nil, decode(envelope.IV), decode(envelope.Ciphertext), []byte(envelope.KeyID))
+	if err != nil {
+		t.Fatalf("decrypt credentials: %v", err)
+	}
+	var credentials struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		IssuedAt int64  `json:"issued_at"`
+	}
+	if err := json.Unmarshal(plaintext, &credentials); err != nil {
+		t.Fatalf("decode credentials: %v", err)
+	}
+	return credentials
+}
+
 func TestImageCaptchaChallengeAndLoginPayload(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/settings/public", func(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +218,10 @@ func TestImageCaptchaChallengeAndLoginPayload(t *testing.T) {
 
 func TestLoginMarksCaptchaRejection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/auth/credential-key" {
+			http.NotFound(w, r)
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"code":400,"message":"验证码错误","data":null}`))
 	}))

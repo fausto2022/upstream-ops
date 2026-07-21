@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http/cookiejar"
 	"net/url"
 	"strconv"
 	"strings"
@@ -27,7 +28,9 @@ type Client struct {
 }
 
 func New() *Client {
+	jar, _ := cookiejar.New(nil)
 	c := resty.New().
+		SetCookieJar(jar).
 		SetTimeout(30*time.Second).
 		SetHeader("User-Agent", "relaydeck/0.1").
 		SetHeader("Accept", "application/json")
@@ -112,12 +115,19 @@ func (c *Client) GetImageCaptcha(ctx context.Context, ch *connector.Channel) (*c
 
 func (c *Client) Login(ctx context.Context, ch *connector.Channel) (*connector.AuthSession, error) {
 	site := strings.TrimRight(ch.SiteURL, "/")
-	body := map[string]any{
-		"email":    ch.Username,
-		"password": ch.Password,
-	}
+	body := make(map[string]any, len(ch.LoginExtraParams)+3)
 	for k, v := range ch.LoginExtraParams {
 		body[k] = v
+	}
+	envelope, supported, err := c.buildCredentialEnvelope(ctx, ch)
+	if err != nil {
+		return nil, fmt.Errorf("sub2api credential envelope: %w", err)
+	}
+	if supported {
+		body["credential_envelope"] = envelope
+	} else {
+		body["email"] = ch.Username
+		body["password"] = ch.Password
 	}
 	if ch.TurnstileToken != "" {
 		body["turnstile_token"] = ch.TurnstileToken
