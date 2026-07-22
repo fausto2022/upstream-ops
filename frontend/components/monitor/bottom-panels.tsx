@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog"
 import {
   useAnnouncements,
+  useAlertEvents,
   useCaptchaConfigs,
   useDashboardSummary,
   useNotificationChannels,
@@ -41,12 +42,12 @@ import { CaptchaFormDialog } from "@/components/monitor/captcha-form-dialog"
 import { NotificationFormDialog } from "@/components/monitor/notification-form-dialog"
 import type { LucideIcon } from "lucide-react"
 import type {
+  AlertEvent,
+  AlertEventPage,
   CaptchaConfig,
   NotificationChannel,
   NotificationEvent,
   NotificationChannelType,
-  NotificationLog,
-  NotificationLogPage,
   UpstreamAnnouncement,
 } from "@/lib/api-types"
 
@@ -84,14 +85,14 @@ const FEED_DIALOG_SIZE = 20
 export function AlertFeed() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [page, setPage] = useState(1)
-  const [feed, setFeed] = useState<NotificationLog[]>([])
+  const [feed, setFeed] = useState<AlertEvent[]>([])
   const [feedMeta, setFeedMeta] = useState<{ total: number; pages: number }>({
     total: 0,
     pages: 1,
   })
   const [feedLoading, setFeedLoading] = useState(false)
   const [feedError, setFeedError] = useState<string | null>(null)
-  const preview = useNotificationLogs(1, FEED_PREVIEW_SIZE)
+  const preview = useAlertEvents(1, FEED_PREVIEW_SIZE)
   const items = preview.data?.items ?? []
 
   function loadNextPage() {
@@ -104,8 +105,8 @@ export function AlertFeed() {
     let cancelled = false
     setFeedLoading(true)
     setFeedError(null)
-    apiFetch<NotificationLogPage>(
-      `/notifications/logs?page=${page}&page_size=${FEED_DIALOG_SIZE}`,
+    apiFetch<AlertEventPage>(
+      `/notifications/events?page=${page}&page_size=${FEED_DIALOG_SIZE}`,
     )
       .then((res) => {
         if (cancelled) return
@@ -169,13 +170,11 @@ export function AlertFeed() {
                           <div className="flex min-w-0 items-start justify-between gap-3">
                             <p className="min-w-0 flex-1 truncate text-sm text-foreground">{a.subject}</p>
                             <span className="shrink-0 text-xs text-muted-foreground">
-                              {relativeTime(a.sent_at)}
+                              {relativeTime(a.created_at)}
                             </span>
                           </div>
                           <p className="truncate text-xs text-muted-foreground">
-                            {a.channel_name
-                              ? `${a.channel_name}${a.channel_type ? ` · ${channelTypeLabel(a.channel_type)}` : ""}`
-                              : `渠道 #${a.channel_id}${a.channel_type ? ` · ${channelTypeLabel(a.channel_type)}` : ""}`}
+                            {a.upstream_channel_name || "系统事件"}
                           </p>
                         </div>
                       </div>
@@ -213,21 +212,16 @@ export function AlertFeed() {
                           <div className="flex min-w-0 items-start justify-between gap-3">
                             <p className="min-w-0 flex-1 text-sm font-medium text-foreground">{a.subject}</p>
                             <span className="shrink-0 text-xs text-muted-foreground">
-                              {relativeTime(a.sent_at)}
+                              {relativeTime(a.created_at)}
                             </span>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {a.channel_name
-                              ? `${a.channel_name}${a.channel_type ? ` · ${channelTypeLabel(a.channel_type)}` : ""}`
-                              : `渠道 #${a.channel_id}${a.channel_type ? ` · ${channelTypeLabel(a.channel_type)}` : ""}`}
+                            {a.upstream_channel_name || "系统事件"}
                           </p>
                           {a.body ? (
                             <p className="mt-1 text-xs leading-5 text-muted-foreground">
                               {a.body}
                             </p>
-                          ) : null}
-                          {!a.success && a.error_message ? (
-                            <p className="mt-1 text-xs leading-5 text-danger">{a.error_message}</p>
                           ) : null}
                         </div>
                     </div>

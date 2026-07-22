@@ -91,6 +91,47 @@ func registerNotifications(g *gin.RouterGroup, d *Deps) {
 			"pages":     pages,
 		}})
 	})
+
+	g.GET("/notifications/events", func(c *gin.Context) {
+		page, pageSize, err := parsePageQuery(c)
+		if err != nil {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+		list, total, err := d.Notifies.ListEventsPage(page, pageSize)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, err)
+			return
+		}
+		channels, err := d.Channels.List()
+		if err != nil {
+			fail(c, http.StatusInternalServerError, err)
+			return
+		}
+		channelNames := make(map[uint]string, len(channels))
+		for _, channel := range channels {
+			channelNames[channel.ID] = channel.Name
+		}
+		items := make([]gin.H, 0, len(list))
+		for _, item := range list {
+			items = append(items, gin.H{
+				"id":                    item.ID,
+				"upstream_channel_id":   item.UpstreamChannelID,
+				"upstream_channel_name": channelNames[item.UpstreamChannelID],
+				"event":                 item.Event,
+				"subject":               item.Subject,
+				"body":                  item.Body,
+				"created_at":            item.CreatedAt,
+			})
+		}
+		pages := 1
+		if total > 0 {
+			pages = int((total + int64(pageSize) - 1) / int64(pageSize))
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"items": items, "total": total, "page": page, "page_size": pageSize, "pages": pages,
+		}})
+	})
 }
 
 type notifyChannelInput struct {

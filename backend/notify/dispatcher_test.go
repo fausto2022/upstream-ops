@@ -71,11 +71,25 @@ func TestNotificationHTTPClientsHaveTimeout(t *testing.T) {
 }
 
 func TestDispatcherSkipsGloballyDisabledEvents(t *testing.T) {
-	dispatcher := &Dispatcher{policy: Policy{DisabledEvents: []storage.NotificationEvent{
+	db, err := storage.Open(storage.DBConfig{Driver: storage.DBDriverSQLite, Path: filepath.Join(t.TempDir(), "disabled.db")})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := storage.AutoMigrate(db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	sqlDB, _ := db.DB()
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	cipher, err := crypto.NewCipher("test-secret")
+	if err != nil {
+		t.Fatalf("new cipher: %v", err)
+	}
+	repo := storage.NewNotifications(db)
+	dispatcher := NewDispatcher(repo, cipher, slog.New(slog.NewTextHandler(io.Discard, nil)), Policy{DisabledEvents: []storage.NotificationEvent{
 		storage.EventBalanceLow,
 		storage.EventRateChanged,
 		storage.EventRateStructureChanged,
-	}}}
+	}})
 	if err := dispatcher.Dispatch(context.Background(), Message{Event: storage.EventBalanceLow, ChannelID: 1}); err != nil {
 		t.Fatalf("dispatch disabled event: %v", err)
 	}
@@ -86,5 +100,19 @@ func TestDispatcherSkipsGloballyDisabledEvents(t *testing.T) {
 		Added: []RateChange{{GroupName: "new", NewRatio: 1}},
 	}); err != nil {
 		t.Fatalf("dispatch disabled rate structure event: %v", err)
+	}
+	events, total, err := repo.ListEventsPage(1, 10)
+	if err != nil {
+		t.Fatalf("list alert events: %v", err)
+	}
+	if total != 3 || len(events) != 3 {
+		t.Fatalf("alert events = %d/%d, want 3", len(events), total)
+	}
+	logs, err := repo.ListLogs(10)
+	if err != nil {
+		t.Fatalf("list delivery logs: %v", err)
+	}
+	if len(logs) != 0 {
+		t.Fatalf("delivery logs = %d, want 0", len(logs))
 	}
 }

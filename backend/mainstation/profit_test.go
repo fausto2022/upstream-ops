@@ -128,6 +128,56 @@ func TestProfitEvaluationTreatsMinimumPositiveMarginAsHealthy(t *testing.T) {
 	}
 }
 
+func TestProfitEvaluationContinuesAfterMemberSchedulingFailure(t *testing.T) {
+	service, db, admin, _ := newTestService(t)
+	current := time.Date(2026, 7, 22, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	service.now = func() time.Time { return current }
+	pool, first, group := createProfitMember(
+		t, service, db, admin, current, 0.8,
+		`{"mode":"observe","minimum_margin_basis_points":0,"risk_confirmations":1,"cost_max_age_minutes":60}`,
+	)
+	remoteID := int64(202)
+	later := *first
+	later.ID = 0
+	later.RemoteAccountID = &remoteID
+	later.RemoteAccountName = "later"
+	if err := service.store.CreateMember(&later); err != nil {
+		t.Fatalf("create later member: %v", err)
+	}
+	admin.accounts = append(admin.accounts, sub2api.AdminAccount{
+		ID: remoteID, Name: "later", Status: "active", Schedulable: true,
+	})
+	config, err := service.store.GetConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	config.AutoRecovery = true
+	if err := service.store.SaveConfig(config); err != nil {
+		t.Fatalf("enable recovery: %v", err)
+	}
+
+	// 第一次评估建立恢复确认记录；随后模拟前一个远端账号被人工删除。
+	if _, err := service.EvaluatePool(context.Background(), pool.ID, "manual"); err != nil {
+		t.Fatalf("seed evaluation: %v", err)
+	}
+	admin.accounts = admin.accounts[1:]
+	current = current.Add(time.Minute)
+	result, err := service.EvaluatePool(context.Background(), pool.ID, "manual")
+	if err != nil {
+		t.Fatalf("evaluation after missing remote account: %v", err)
+	}
+	if len(result.Checks) != 2 {
+		t.Fatalf("checks = %d, want 2", len(result.Checks))
+	}
+	checks, err := service.store.ListProfitChecksSince(later.ID, group.ID, current.Add(-time.Second), 10)
+	if err != nil {
+		t.Fatalf("list later member checks: %v", err)
+	}
+	if len(checks) == 0 {
+		t.Fatal("later member did not receive a profit check")
+	}
+}
+
 func TestProfitEvaluationPrefersBoundSourceGroupRate(t *testing.T) {
 	service, db, admin, _ := newTestService(t)
 	current := time.Date(2026, 7, 21, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))

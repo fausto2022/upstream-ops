@@ -294,6 +294,16 @@ export interface DashboardChannelStat {
   last_error?: string
 }
 
+export interface AlertEvent {
+  id: number
+  upstream_channel_id?: number
+  upstream_channel_name?: string
+  event: NotificationEvent
+  subject: string
+  body: string
+  created_at: string
+}
+
 export interface DashboardProfitSummary {
   available: boolean
   today_available: boolean
@@ -669,6 +679,14 @@ export interface UpstreamSyncLog {
 
 export interface UpstreamSyncLogPage {
   items: UpstreamSyncLog[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface AlertEventPage {
+  items: AlertEvent[]
   total: number
   page: number
   page_size: number

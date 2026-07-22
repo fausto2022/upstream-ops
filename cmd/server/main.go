@@ -115,6 +115,7 @@ func main() {
 	channelSvc.UpdateProxyConfig(cfg.Proxy)
 	channelSvc.UpdateUpstreamConfig(cfg.Upstream)
 	dispatcher := notify.NewDispatcher(notifies, cipher, log, notify.Policy{
+		DisabledEvents:                           append([]storage.NotificationEvent(nil), cfg.Notifications.DisabledEvents...),
 		BatchRateChanges:                         cfg.Notifications.BatchRateChanges,
 		MinChangePct:                             cfg.Notifications.MinChangePct,
 		BalanceLowCooldown:                       time.Duration(cfg.Notifications.BalanceLowCooldownMinutes) * time.Minute,

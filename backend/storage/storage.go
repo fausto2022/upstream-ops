@@ -147,6 +147,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&CostSnapshot{},
 		&NotificationChannel{},
 		&NotificationLog{},
+		&AlertEvent{},
 		&NotificationCooldown{},
 		&MonitorLog{},
 		&UpstreamSyncTarget{},

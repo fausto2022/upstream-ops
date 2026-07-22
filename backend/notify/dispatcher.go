@@ -105,12 +105,13 @@ func (d *Dispatcher) Send(ctx context.Context, ch *storage.NotificationChannel, 
 // 去抖：balance_low 同渠道在 BalanceLowCooldown 内不重复推送，状态在数据库里持久化。
 // 失败：按 SendMaxAttempts 进行指数退避重试。
 func (d *Dispatcher) Dispatch(ctx context.Context, msg Message) error {
-	if !d.Policy().EventEnabled(msg.Event) {
-		return nil
-	}
 	claimed, suppressed := d.claimCooldown(msg)
 	if suppressed {
 		return nil
+	}
+	eventErr := d.recordEvent(msg)
+	if !d.Policy().EventEnabled(msg.Event) {
+		return eventErr
 	}
 	sent, err := d.fanout(ctx, msg, nil)
 	if claimed && sent == 0 {
@@ -120,7 +121,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, msg Message) error {
 		}
 		err = errors.Join(err, resetErr)
 	}
-	return err
+	return errors.Join(eventErr, err)
 }
 
 // DispatchRateBatch 把一次扫描收集到的多条 RateChange 按 Policy 合并 / 过滤后推送。
@@ -139,10 +140,6 @@ func (d *Dispatcher) DispatchRateEventBatch(ctx context.Context, channel *storag
 		return nil
 	}
 	policy := d.Policy()
-	if !policy.EventEnabled(event) {
-		return nil
-	}
-
 	filtered := make([]RateChange, 0, len(changes))
 	for _, c := range changes {
 		if event != storage.EventRateChanged || c.ChangePctAbove(policy.MinChangePct) {
@@ -152,13 +149,17 @@ func (d *Dispatcher) DispatchRateEventBatch(ctx context.Context, channel *storag
 	if len(filtered) == 0 {
 		return nil
 	}
+	eventErr := d.recordEvent(BuildRateBatchMessage(channel, event, filtered))
+	if !policy.EventEnabled(event) {
+		return eventErr
+	}
 
 	notifyChannels, err := d.repo.ListEnabledChannels()
 	if err != nil {
-		return err
+		return errors.Join(eventErr, err)
 	}
 	if len(notifyChannels) == 0 {
-		return nil
+		return eventErr
 	}
 
 	var errs []error
@@ -187,22 +188,23 @@ func (d *Dispatcher) DispatchRateEventBatch(ctx context.Context, channel *storag
 			}
 		}
 	}
-	return errors.Join(errs...)
+	return errors.Join(eventErr, errors.Join(errs...))
 }
 
 func (d *Dispatcher) DispatchRateStructureBatch(ctx context.Context, channel *storage.Channel, change RateStructureChange) error {
 	if channel == nil || len(change.Added)+len(change.Removed) == 0 {
 		return nil
 	}
+	eventErr := d.recordEvent(BuildRateStructureMessage(channel, change))
 	if !d.Policy().EventEnabled(storage.EventRateStructureChanged) {
-		return nil
+		return eventErr
 	}
 	notifyChannels, err := d.repo.ListEnabledChannels()
 	if err != nil {
-		return err
+		return errors.Join(eventErr, err)
 	}
 	if len(notifyChannels) == 0 {
-		return nil
+		return eventErr
 	}
 
 	var errs []error
@@ -221,7 +223,7 @@ func (d *Dispatcher) DispatchRateStructureBatch(ctx context.Context, channel *st
 			errs = append(errs, err)
 		}
 	}
-	return errors.Join(errs...)
+	return errors.Join(eventErr, errors.Join(errs...))
 }
 
 // subsetForSubscriptions 把 changes 过滤成"匹配 subs 订阅规则"的子集。
@@ -437,4 +439,23 @@ func (d *Dispatcher) logResult(channelID uint, msg Message, sendErr error) {
 	if err := d.repo.AppendLog(log); err != nil && d.log != nil {
 		d.log.Warn("append notification log", "err", err)
 	}
+}
+
+func (d *Dispatcher) recordEvent(msg Message) error {
+	if d.repo == nil || msg.Event == "" {
+		return nil
+	}
+	event := &storage.AlertEvent{
+		UpstreamChannelID: msg.ChannelID,
+		Event:             msg.Event,
+		Subject:           msg.Subject,
+		Body:              msg.Body,
+	}
+	if err := d.repo.AppendEvent(event); err != nil {
+		if d.log != nil {
+			d.log.Warn("append alert event", "err", err, "event", msg.Event)
+		}
+		return err
+	}
+	return nil
 }

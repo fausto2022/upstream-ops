@@ -60,6 +60,9 @@ func (r *Channels) Delete(id uint) error {
 		if err := tx.Where("upstream_channel_id = ?", id).Delete(&NotificationLog{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("upstream_channel_id = ?", id).Delete(&AlertEvent{}).Error; err != nil {
+			return err
+		}
 		if channel.Name != "" {
 			pattern := "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(channel.Name) + "%"
 			if err := tx.Where("upstream_channel_id = 0 AND (subject LIKE ? ESCAPE '!' OR body LIKE ? ESCAPE '!')", pattern, pattern).

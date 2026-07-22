@@ -48,6 +48,34 @@ func (r *Notifications) AppendLog(l *NotificationLog) error {
 	return r.db.Create(l).Error
 }
 
+func (r *Notifications) AppendEvent(event *AlertEvent) error {
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = time.Now()
+	}
+	return r.db.Create(event).Error
+}
+
+func (r *Notifications) ListEventsPage(page, pageSize int) ([]AlertEvent, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	var total int64
+	if err := r.db.Model(&AlertEvent{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []AlertEvent
+	if err := r.db.Order("created_at DESC").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
 func (r *Notifications) ListLogs(limit int) ([]NotificationLog, error) {
 	if limit <= 0 {
 		limit = 100
@@ -83,6 +111,11 @@ func (r *Notifications) ListLogsPage(page, pageSize int) ([]NotificationLog, int
 // DeleteLogsBefore 删除 sent_at < cutoff 的通知日志，返回删除行数。
 func (r *Notifications) DeleteLogsBefore(cutoff time.Time) (int64, error) {
 	res := r.db.Where("sent_at < ?", cutoff).Delete(&NotificationLog{})
+	return res.RowsAffected, res.Error
+}
+
+func (r *Notifications) DeleteEventsBefore(cutoff time.Time) (int64, error) {
+	res := r.db.Where("created_at < ?", cutoff).Delete(&AlertEvent{})
 	return res.RowsAffected, res.Error
 }
 

@@ -119,7 +119,8 @@ func (s *Service) EvaluatePool(ctx context.Context, poolID uint, source string) 
 			if _, err := s.ActivateGuardLock(ctx, *member.RemoteAccountID, "margin", "profit margin remained insufficient", map[string]any{
 				"pool_id": pool.ID, "member_id": member.ID, "minimum_margin_basis_points": policy.MinimumMarginBasisPoints,
 			}, "margin"); err != nil {
-				return nil, err
+				s.logProfitSchedulingError(pool.ID, member, "activate margin guard", err)
+				continue
 			}
 			applied[member.ID] = struct{}{}
 		} else if memberAllHealthy && member.RemoteAccountID != nil && config.AutoRecovery {
@@ -129,7 +130,8 @@ func (s *Service) EvaluatePool(ctx context.Context, poolID uint, source string) 
 			}
 			if confirmed {
 				if _, err := s.ClearGuardLock(ctx, *member.RemoteAccountID, "margin", "margin"); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-					return nil, err
+					s.logProfitSchedulingError(pool.ID, member, "clear margin guard", err)
+					continue
 				}
 			}
 		}
@@ -157,6 +159,19 @@ func (s *Service) EvaluatePool(ctx context.Context, poolID uint, source string) 
 	}
 	_ = s.appendAudit(&pool.ID, nil, nil, "pool_profit_evaluate", source, true, nil, result, nil, "", "")
 	return result, nil
+}
+
+func (s *Service) logProfitSchedulingError(poolID uint, member *storage.MainAccountPoolMember, action string, err error) {
+	if s.log == nil {
+		return
+	}
+	s.log.Warn("main station profit scheduling action failed",
+		"err", err,
+		"action", action,
+		"pool_id", poolID,
+		"member_id", member.ID,
+		"remote_account_id", member.RemoteAccountID,
+	)
 }
 
 func (s *Service) notifyProfitTransition(ctx context.Context, pool *storage.MainAccountPool, member *storage.MainAccountPoolMember, group *storage.UpstreamSyncTargetGroup, check *storage.MainAccountProfitCheck, previous []storage.MainAccountProfitCheck) {

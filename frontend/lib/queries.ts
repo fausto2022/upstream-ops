@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api"
 import { useRefreshTick } from "@/lib/refresh-context"
 import type {
   AppVersion,
+  AlertEventPage,
   BalanceTrendPoint,
   CaptchaConfig,
   Channel,
@@ -272,6 +273,12 @@ export function useCaptchaConfigs(enabled = true) {
 
 export function useSystemConfig() {
   return useApi<SystemConfigResponse>("/settings/config")
+}
+
+export function useAlertEvents(page = 1, pageSize = 20) {
+  return useApi<AlertEventPage>(
+    `/notifications/events?page=${page}&page_size=${pageSize}`,
+  )
 }
 
 export function useRateRankingConfig() {

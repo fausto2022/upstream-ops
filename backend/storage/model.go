@@ -283,6 +283,18 @@ type NotificationLog struct {
 
 func (NotificationLog) TableName() string { return "notification_logs" }
 
+// AlertEvent 系统产生的告警事件，与是否配置或启用外部通知无关。
+type AlertEvent struct {
+	ID                uint              `gorm:"primaryKey" json:"id"`
+	UpstreamChannelID uint              `gorm:"not null;default:0;index" json:"upstream_channel_id,omitempty"`
+	Event             NotificationEvent `gorm:"size:64;not null;index" json:"event"`
+	Subject           string            `gorm:"size:512;not null" json:"subject"`
+	Body              string            `gorm:"type:text" json:"body"`
+	CreatedAt         time.Time         `gorm:"not null;index" json:"created_at"`
+}
+
+func (AlertEvent) TableName() string { return "alert_events" }
+
 // NotificationCooldown 跨重启持久化的通知冷却记录。
 //
 // 业务键 (ChannelID, Event)：标记某渠道某类事件最近一次发送时间。

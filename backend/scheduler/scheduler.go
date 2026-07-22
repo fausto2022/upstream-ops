@@ -247,6 +247,12 @@ func (s *Scheduler) runRetention() {
 		} else if n > 0 {
 			s.log.Info("retention notification_logs deleted", "rows", n, "before", cutoff)
 		}
+		n, err = s.notifies.DeleteEventsBefore(cutoff)
+		if err != nil {
+			s.log.Warn("retention alert_events failed", "err", err)
+		} else if n > 0 {
+			s.log.Info("retention alert_events deleted", "rows", n, "before", cutoff)
+		}
 	}
 
 	if r.AnnouncementsDays > 0 && s.announcements != nil {
