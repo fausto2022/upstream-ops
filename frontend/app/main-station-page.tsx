@@ -775,6 +775,8 @@ function SourceGroupRate({ account, showProfit }: { account: MainStationAccount;
   const profitEvaluated = profit != null && (profit.status === "healthy" || profit.status === "risk") && profit.sale_multiplier_micros > 0 && profit.cost_multiplier_micros > 0
   const marginPercent = profitEvaluated ? profit.margin_basis_points / 100 : null
   const minimumMarginPercent = profit ? profit.minimum_margin_basis_points / 100 : null
+  const saleMultiplier = profitEvaluated && profit ? profit.sale_multiplier_micros / 1_000_000 : null
+  const usesUserMinimumRate = profit?.sale_source?.startsWith("main_group_user_min_rate") ?? false
   const marginText = marginPercent == null ? "待评估" : `${marginPercent > 0 ? "+" : ""}${marginPercent.toFixed(1)}%`
   const marginClassName = marginPercent == null
     ? "text-muted-foreground"
@@ -787,7 +789,10 @@ function SourceGroupRate({ account, showProfit }: { account: MainStationAccount;
         <span className="font-medium tabular-nums">{rate.toFixed(3)}</span>
         {showProfit ? <span className={cn("text-[11px] font-medium tabular-nums", marginClassName)}>（利润 {marginText}）</span> : null}
       </div>
-      <div className="max-w-24 truncate text-xs text-muted-foreground">{groupName}</div>
+      <div className="max-w-32 truncate text-xs text-muted-foreground">
+        {groupName}
+        {usesUserMinimumRate && saleMultiplier != null ? ` · 售 ${saleMultiplier.toFixed(3)}` : ""}
+      </div>
     </div>
   )
   if (!showProfit) {
@@ -801,12 +806,15 @@ function SourceGroupRate({ account, showProfit }: { account: MainStationAccount;
         <div>当前上游倍率：{rate.toFixed(3)}（{observedAt}）</div>
         {profitEvaluated && profit ? (
           <>
-            <div>主站销售倍率：{formatMainStationMultiplier(profit.sale_multiplier_micros)}</div>
+            <div>
+              利润计费倍率：{formatMainStationMultiplier(profit.sale_multiplier_micros)}
+              {usesUserMinimumRate ? "（用户专属最低倍率）" : ""}
+            </div>
             <div>有效成本倍率：{formatMainStationMultiplier(profit.cost_multiplier_micros)}</div>
             <div>利润率：{marginText}</div>
             {minimumMarginPercent != null ? <div>最低利润要求：{minimumMarginPercent.toFixed(1)}%</div> : null}
             <div>利润判定：{profit.status === "risk" ? "利润不足" : "正常"}</div>
-            <div>计算公式：（主站倍率 - 有效成本倍率）÷ 主站倍率</div>
+            <div>计算公式：（利润计费倍率 - 有效成本倍率）÷ 利润计费倍率</div>
             <div>{usingCurrentProfit ? "实时计算" : "最近评估"}：{dateTime(profit.observed_at)}</div>
           </>
         ) : (
