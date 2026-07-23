@@ -839,6 +839,9 @@ func (s *Service) createManagedMember(ctx context.Context, poolID uint, in Membe
 	member.OwnershipMode = "managed"
 	member.BindingStatus = "pending"
 	member.Status = "pending"
+	if err := s.validateManagedSourcePlatform(pool, member); err != nil {
+		return nil, err
+	}
 	if member.SourceAPIKeyID == nil {
 		member.AccountName = s.managedAutomaticName(pool, member)
 	}
@@ -858,6 +861,25 @@ func (s *Service) createManagedMember(ctx context.Context, poolID uint, in Membe
 		return member, err
 	}
 	return s.store.FindMember(poolID, member.ID)
+}
+
+func (s *Service) validateManagedSourcePlatform(pool *storage.MainAccountPool, member *storage.MainAccountPoolMember) error {
+	rates, err := s.rates.ListByChannel(member.SourceChannelID)
+	if err != nil {
+		return fmt.Errorf("读取上游分组类型失败：%w", err)
+	}
+	for i := range rates {
+		if !sourceMemberMatchesRate(member, &rates[i], len(rates)) {
+			continue
+		}
+		sourcePlatform := normalizeHealthPlatform(rates[i].Platform)
+		targetPlatform := normalizeHealthPlatform(pool.Platform)
+		if sourcePlatform != "" && targetPlatform != "" && sourcePlatform != targetPlatform {
+			return fmt.Errorf("上游分组类型 %s 与主站分组类型 %s 不一致，不能添加", sourcePlatform, targetPlatform)
+		}
+		return nil
+	}
+	return nil
 }
 
 func (s *Service) SyncMember(ctx context.Context, poolID, memberID uint) (*storage.MainAccountPoolMember, error) {
@@ -1060,6 +1082,9 @@ func (s *Service) syncManagedAccountModels(ctx context.Context, client adminClie
 }
 
 func (s *Service) managedAccountRequest(ctx context.Context, pool *storage.MainAccountPool, member *storage.MainAccountPoolMember, priority int) (sub2api.AdminAccount, string, error) {
+	if err := s.validateManagedSourcePlatform(pool, member); err != nil {
+		return sub2api.AdminAccount{}, "", err
+	}
 	channel, err := s.channels.FindByID(member.SourceChannelID)
 	if err != nil {
 		return sub2api.AdminAccount{}, "", fmt.Errorf("load source channel: %w", err)

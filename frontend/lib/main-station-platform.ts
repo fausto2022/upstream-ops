@@ -18,3 +18,9 @@ export function mainStationHealthAPIMode(platform?: string) {
       return "openai_chat"
   }
 }
+
+export function mainStationPlatformsMatch(left?: string, right?: string) {
+  const normalizedLeft = normalizeMainStationPlatform(left)
+  const normalizedRight = normalizeMainStationPlatform(right)
+  return normalizedLeft !== "" && normalizedLeft === normalizedRight
+}

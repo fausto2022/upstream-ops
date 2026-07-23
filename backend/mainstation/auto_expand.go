@@ -319,6 +319,9 @@ func autoExpansionMatchingMember(members []storage.MainAccountPoolMember, channe
 }
 
 func classifyAutoExpansionRate(rate storage.RateSnapshot) string {
+	if platform := normalizeHealthPlatform(rate.Platform); platform != "" {
+		return platform
+	}
 	text := rate.ModelName + " " + rate.Description
 	for i := range autoExpansionProviderPatterns {
 		if autoExpansionProviderPatterns[i].pattern.MatchString(text) {

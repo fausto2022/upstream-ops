@@ -42,7 +42,7 @@ import {
   latestRateSeenAt,
   type RateCategoryOption,
 } from "@/lib/rate-ranking"
-import { mainStationHealthAPIMode, normalizeMainStationPlatform } from "@/lib/main-station-platform"
+import { mainStationHealthAPIMode, mainStationPlatformsMatch } from "@/lib/main-station-platform"
 import { cn } from "@/lib/utils"
 
 export const RATE_PROVIDERS: Array<{ value: RateProviderType; label: string }> = [
@@ -96,11 +96,11 @@ export function RateRankingDialog({ open, onOpenChange, provider, onProviderChan
     if (!selectedRate) return []
     const connected = new Set(selectedRate.main_station_groups.map((group) => group.group_id))
     return workspaces
-      .filter((workspace) => !workspace.group.missing && !connected.has(workspace.group.id))
+      .filter((workspace) => !workspace.group.missing
+        && !connected.has(workspace.group.id)
+        && mainStationPlatformsMatch(workspace.group.platform, provider))
       .sort((left, right) => {
-        const leftMatch = normalizeMainStationPlatform(left.group.platform) === provider ? 0 : 1
-        const rightMatch = normalizeMainStationPlatform(right.group.platform) === provider ? 0 : 1
-        return leftMatch - rightMatch || left.group.sort - right.group.sort || left.group.id - right.group.id
+        return left.group.sort - right.group.sort || left.group.id - right.group.id
       })
   }, [provider, selectedRate, workspaces])
 
@@ -345,7 +345,7 @@ export function RateRankingDialog({ open, onOpenChange, provider, onProviderChan
                       {addedGroupName ? (
                         <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="size-4" />已添加到主站分组「{addedGroupName}」</div>
                       ) : availableWorkspaces.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">当前没有可添加的主站分组，或该上游分组已经全部接入。</p>
+                        <p className="text-sm text-muted-foreground">当前没有同类型的可用主站分组，或该上游分组已经全部接入。</p>
                       ) : (
                         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                           <div className="space-y-2">
@@ -355,7 +355,7 @@ export function RateRankingDialog({ open, onOpenChange, provider, onProviderChan
                               <SelectContent>
                                 {availableWorkspaces.map((workspace) => (
                                   <SelectItem key={workspace.group.id} value={String(workspace.group.id)}>
-                                    {workspace.group.name}{normalizeMainStationPlatform(workspace.group.platform) === provider ? " · 推荐" : ""}
+                                    {workspace.group.name} · 同类型
                                   </SelectItem>
                                 ))}
                               </SelectContent>

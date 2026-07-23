@@ -829,6 +829,28 @@ func TestManagedAutomaticNameUsesChannelAndDefaultGroup(t *testing.T) {
 	}
 }
 
+func TestValidateManagedSourcePlatformRejectsCrossPlatformAccount(t *testing.T) {
+	service, db, _, _ := newTestService(t)
+	channel := createTestChannel(t, db)
+	sourceGroupID := int64(31)
+	rate := &storage.RateSnapshot{
+		ChannelID: channel.ID, RemoteGroupID: &sourceGroupID, ModelName: "Grok",
+		Platform: "grok", Ratio: 0.1, LastSeenAt: time.Now(),
+	}
+	if err := db.Create(rate).Error; err != nil {
+		t.Fatalf("create source rate: %v", err)
+	}
+	member := &storage.MainAccountPoolMember{
+		SourceChannelID: channel.ID, SourceGroupID: &sourceGroupID, SourceGroupName: "Grok",
+	}
+	if err := service.validateManagedSourcePlatform(&storage.MainAccountPool{Platform: "openai"}, member); err == nil || !strings.Contains(err.Error(), "类型 grok") {
+		t.Fatalf("cross-platform validation error = %v", err)
+	}
+	if err := service.validateManagedSourcePlatform(&storage.MainAccountPool{Platform: "xai"}, member); err != nil {
+		t.Fatalf("equivalent platform validation error = %v", err)
+	}
+}
+
 func TestSyncManagedAccountModelsRejectsErrorsAndEmptyResults(t *testing.T) {
 	service, _, admin, _ := newTestService(t)
 	target := sub2api.AdminTarget{BaseURL: "https://main.example.com", APIKey: "admin-key"}

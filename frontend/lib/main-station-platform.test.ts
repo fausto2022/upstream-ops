@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { mainStationHealthAPIMode, normalizeMainStationPlatform } from "./main-station-platform"
+import { mainStationHealthAPIMode, mainStationPlatformsMatch, normalizeMainStationPlatform } from "./main-station-platform"
 
 describe("main station platform", () => {
   it.each([
@@ -21,5 +21,12 @@ describe("main station platform", () => {
     ["grok", "openai_chat"],
   ])("uses the correct health API mode for %s", (platform, expected) => {
     expect(mainStationHealthAPIMode(platform)).toBe(expected)
+  })
+
+  it("only matches equivalent non-empty platforms", () => {
+    expect(mainStationPlatformsMatch("xai", "grok")).toBe(true)
+    expect(mainStationPlatformsMatch("claude", "anthropic")).toBe(true)
+    expect(mainStationPlatformsMatch("grok", "openai")).toBe(false)
+    expect(mainStationPlatformsMatch("", "openai")).toBe(false)
   })
 })

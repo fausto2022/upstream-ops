@@ -16,6 +16,15 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestClassifyAutoExpansionRatePrefersUpstreamPlatform(t *testing.T) {
+	if got := classifyAutoExpansionRate(storage.RateSnapshot{Platform: "openai", ModelName: "Grok 特价"}); got != "openai" {
+		t.Fatalf("classified platform = %q, want openai", got)
+	}
+	if got := classifyAutoExpansionRate(storage.RateSnapshot{ModelName: "Grok 特价"}); got != "grok" {
+		t.Fatalf("fallback classified platform = %q, want grok", got)
+	}
+}
+
 type autoExpansionTestFixture struct {
 	service      *Service
 	db           *gorm.DB
