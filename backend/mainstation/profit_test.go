@@ -20,7 +20,7 @@ func TestProfitProtectionUsesFixedPointAndKeepsLocksIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first evaluation: %v", err)
 	}
-	if len(first.Checks) != 1 || first.Checks[0].Status != "risk" || first.Checks[0].MarginBasisPoints != -2000 {
+	if len(first.Checks) != 1 || first.Checks[0].Status != "risk" || first.Checks[0].MarginBasisPoints != -1666 {
 		t.Fatalf("first evaluation = %#v", first)
 	}
 	if len(first.ProtectionApplied) != 0 || len(admin.schedulableCalls) != 0 {
@@ -123,7 +123,7 @@ func TestProfitEvaluationTreatsMinimumPositiveMarginAsHealthy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("evaluate minimum positive margin: %v", err)
 	}
-	if len(result.Checks) != 1 || result.Checks[0].Status != "healthy" || result.Checks[0].MarginBasisPoints != 500 {
+	if len(result.Checks) != 1 || result.Checks[0].Status != "healthy" || result.Checks[0].MarginBasisPoints != 526 {
 		t.Fatalf("minimum positive margin evaluation = %#v", result)
 	}
 }
@@ -235,7 +235,7 @@ func TestProfitEvaluationPrefersBoundSourceGroupRate(t *testing.T) {
 		t.Fatalf("evaluate source group cost: %v", err)
 	}
 	if len(result.Checks) != 1 || result.Checks[0].CostMultiplierMicros != 800000 ||
-		result.Checks[0].MarginBasisPoints != 2000 || result.Checks[0].CostSource != "source_rate_snapshot" {
+		result.Checks[0].MarginBasisPoints != 2500 || result.Checks[0].CostSource != "source_rate_snapshot" {
 		t.Fatalf("source group cost was not preferred: %#v", result.Checks)
 	}
 }
@@ -297,9 +297,15 @@ func TestProfitMinimumMarginUsesGlobalBoundaryAndGroupOverride(t *testing.T) {
 	current := time.Date(2026, 7, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	service.now = func() time.Time { return current }
 	pool, member, group := createProfitMember(
-		t, service, db, admin, current, 0.8,
+		t, service, db, admin, current, 1,
 		`{"mode":"observe","minimum_margin_basis_points":0,"risk_confirmations":2,"cost_max_age_minutes":60}`,
 	)
+	if err := db.Model(&storage.UpstreamSyncTargetGroup{}).Where("id = ?", group.ID).Updates(map[string]any{
+		"rate_multiplier_micros": 1200000,
+		"user_min_rate_micros":   1200000,
+	}).Error; err != nil {
+		t.Fatalf("update sale multiplier to 1.2: %v", err)
+	}
 	config, err := service.store.GetConfig()
 	if err != nil {
 		t.Fatalf("get main station config: %v", err)
@@ -319,14 +325,14 @@ func TestProfitMinimumMarginUsesGlobalBoundaryAndGroupOverride(t *testing.T) {
 
 	if err := db.Model(&storage.RateSnapshot{}).
 		Where("channel_id = ? AND remote_group_id = ?", member.SourceChannelID, *member.SourceGroupID).
-		Updates(map[string]any{"ratio": 0.9, "last_seen_at": current}).Error; err != nil {
-		t.Fatalf("update source cost to 0.9: %v", err)
+		Updates(map[string]any{"ratio": 1.1, "last_seen_at": current}).Error; err != nil {
+		t.Fatalf("update source cost to 1.1: %v", err)
 	}
 	belowGlobal, err := service.EvaluatePool(context.Background(), pool.ID, "manual")
 	if err != nil {
 		t.Fatalf("evaluate below global margin: %v", err)
 	}
-	if len(belowGlobal.Checks) != 1 || belowGlobal.Checks[0].Status != "risk" || belowGlobal.Checks[0].MarginBasisPoints != 1000 {
+	if len(belowGlobal.Checks) != 1 || belowGlobal.Checks[0].Status != "risk" || belowGlobal.Checks[0].MarginBasisPoints != 909 {
 		t.Fatalf("below global margin = %#v", belowGlobal.Checks)
 	}
 
@@ -339,8 +345,14 @@ func TestProfitMinimumMarginUsesGlobalBoundaryAndGroupOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("evaluate group override: %v", err)
 	}
-	if len(groupOverride.Checks) != 1 || groupOverride.Checks[0].Status != "healthy" || groupOverride.Checks[0].MarginBasisPoints != 1000 {
+	if len(groupOverride.Checks) != 1 || groupOverride.Checks[0].Status != "healthy" || groupOverride.Checks[0].MarginBasisPoints != 909 {
 		t.Fatalf("group override margin = %#v", groupOverride.Checks)
+	}
+}
+
+func TestProfitBasisPointsUsesEffectiveCostAsDenominator(t *testing.T) {
+	if got := profitBasisPoints(1200000, 1000000); got != 2000 {
+		t.Fatalf("profit basis points = %d, want 2000", got)
 	}
 }
 

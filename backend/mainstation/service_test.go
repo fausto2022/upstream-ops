@@ -505,7 +505,7 @@ func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
 	if accounts[0].Member.CurrentProfit == nil || accounts[0].Member.CurrentProfit.Status != "healthy" ||
 		accounts[0].Member.CurrentProfit.SaleMultiplierMicros != 1000000 ||
 		accounts[0].Member.CurrentProfit.CostMultiplierMicros != 75000 ||
-		accounts[0].Member.CurrentProfit.MarginBasisPoints != 9250 {
+		accounts[0].Member.CurrentProfit.MarginBasisPoints != 123333 {
 		t.Fatalf("current profit = %#v", accounts[0].Member.CurrentProfit)
 	}
 
@@ -520,7 +520,7 @@ func TestMainStationAccountUsesLatestSourceGroupRate(t *testing.T) {
 		t.Fatalf("updated source group rate: accounts=%#v err=%v", accounts, err)
 	}
 	if accounts[0].Member.CurrentProfit == nil || accounts[0].Member.CurrentProfit.CostMultiplierMicros != 110000 ||
-		accounts[0].Member.CurrentProfit.MarginBasisPoints != 8900 {
+		accounts[0].Member.CurrentProfit.MarginBasisPoints != 80909 {
 		t.Fatalf("updated current profit = %#v", accounts[0].Member.CurrentProfit)
 	}
 }

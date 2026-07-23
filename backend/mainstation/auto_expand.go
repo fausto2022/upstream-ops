@@ -230,7 +230,7 @@ func (s *Service) autoExpansionCandidates(
 			if costMicros <= 0 || costMicros >= saleMicros {
 				continue
 			}
-			marginBasisPoints := fixedMul(saleMicros-costMicros, 10000, saleMicros)
+			marginBasisPoints := profitBasisPoints(saleMicros, costMicros)
 			if marginBasisPoints <= pool.AutoExpandMinMarginBasisPoints {
 				continue
 			}

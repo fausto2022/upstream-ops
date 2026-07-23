@@ -65,7 +65,7 @@ func TestAutoExpansionTestsAndAddsBestProfitableCandidateOnce(t *testing.T) {
 		t.Fatalf("main station account requests = %#v", fixture.admin.createRequests)
 	}
 	attempt, err := fixture.service.store.FindAutoExpansionAttempt(fixture.pool.ID, fixture.rate.ID)
-	if err != nil || attempt.Status != "added" || attempt.CostMultiplierMicros != 200000 || attempt.MarginBasisPoints != 8000 {
+	if err != nil || attempt.Status != "added" || attempt.CostMultiplierMicros != 200000 || attempt.MarginBasisPoints != 40000 {
 		t.Fatalf("auto expansion attempt = %#v, err=%v", attempt, err)
 	}
 	updatedPool, err := fixture.service.store.FindPool(fixture.pool.ID)
@@ -108,7 +108,11 @@ func TestAutoExpansionCoolsDownFailuresButRetriesChangedRates(t *testing.T) {
 }
 
 func TestAutoExpansionRequiresMarginStrictlyAboveThreshold(t *testing.T) {
-	fixture := newAutoExpansionTestFixture(t, 8000)
+	fixture := newAutoExpansionTestFixture(t, 6000)
+	fixture.rate.Ratio = 1.25
+	if err := fixture.saveRate(); err != nil {
+		t.Fatalf("set boundary candidate rate: %v", err)
+	}
 
 	fixture.service.RunAutoExpansion(context.Background())
 

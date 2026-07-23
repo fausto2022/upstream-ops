@@ -414,7 +414,7 @@ func (s *Service) buildProfitCheck(pool *storage.MainAccountPool, member *storag
 	effectiveCost := fixedMul(cost.Micros, costAdjustment, storage.MainStationScale)
 	check.CostMultiplierMicros = effectiveCost
 	check.MarginValueMicros = saleMicros - effectiveCost
-	check.MarginBasisPoints = fixedMul(check.MarginValueMicros, 10000, saleMicros)
+	check.MarginBasisPoints = profitBasisPoints(saleMicros, effectiveCost)
 	if check.MarginValueMicros <= 0 {
 		check.Status = "risk"
 		check.Reason = fmt.Sprintf("sale multiplier %d does not exceed cost multiplier %d", saleMicros, effectiveCost)
@@ -425,6 +425,13 @@ func (s *Service) buildProfitCheck(pool *storage.MainAccountPool, member *storag
 		check.Status = "healthy"
 	}
 	return check
+}
+
+func profitBasisPoints(saleMicros, costMicros int64) int64 {
+	if costMicros <= 0 {
+		return 0
+	}
+	return fixedMul(saleMicros-costMicros, 10000, costMicros)
 }
 
 func effectiveSaleMultiplier(group *storage.UpstreamSyncTargetGroup, now time.Time) (int64, string, string) {

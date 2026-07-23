@@ -814,7 +814,7 @@ function SourceGroupRate({ account, showProfit }: { account: MainStationAccount;
             <div>利润率：{marginText}</div>
             {minimumMarginPercent != null ? <div>最低利润要求：{minimumMarginPercent.toFixed(1)}%</div> : null}
             <div>利润判定：{profit.status === "risk" ? "利润不足" : "正常"}</div>
-            <div>计算公式：（利润计费倍率 - 有效成本倍率）÷ 利润计费倍率</div>
+            <div>计算公式：（利润计费倍率 - 有效成本倍率）÷ 有效成本倍率</div>
             <div>{usingCurrentProfit ? "实时计算" : "最近评估"}：{dateTime(profit.observed_at)}</div>
           </>
         ) : (
