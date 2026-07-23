@@ -115,18 +115,19 @@ func (s *Service) ProfitSummary(days int) (*ProfitSummary, error) {
 		}
 	}
 	summary.Available = len(items) > 0
-	summary.TodayGuaranteedRevenue = applyRevenueRatio(summary.TodayRevenue, ratioBasisPoints)
-	summary.SevenDayGuaranteedRevenue = applyRevenueRatio(summary.SevenDayRevenue, ratioBasisPoints)
 	if err := s.applyUpstreamCosts(summary, days, todayKey); err != nil {
 		return nil, err
 	}
 	summary.TodayProfit = summary.TodayRevenue - summary.TodayCost
 	summary.SevenDayProfit = summary.SevenDayRevenue - summary.SevenDayCost
+	summary.TodayGuaranteedRevenue = guaranteedNetRevenue(summary.TodayRevenue, summary.TodayCost, ratioBasisPoints)
+	summary.SevenDayGuaranteedRevenue = guaranteedNetRevenue(summary.SevenDayRevenue, summary.SevenDayCost, ratioBasisPoints)
 	return summary, nil
 }
 
-func applyRevenueRatio(revenue float64, ratioBasisPoints int64) float64 {
-	return revenue * float64(normalizedGuaranteedRevenueRatioBP(ratioBasisPoints)) / float64(defaultGuaranteedRevenueRatioBP)
+func guaranteedNetRevenue(revenue, cost float64, ratioBasisPoints int64) float64 {
+	convertedRevenue := revenue * float64(normalizedGuaranteedRevenueRatioBP(ratioBasisPoints)) / float64(defaultGuaranteedRevenueRatioBP)
+	return convertedRevenue - cost
 }
 
 func (s *Service) applyUpstreamCosts(summary *ProfitSummary, days int, todayKey string) error {

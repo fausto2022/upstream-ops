@@ -194,7 +194,7 @@ func TestDashboardSummaryIncludesCosts(t *testing.T) {
 	if resp.Data.Profit.TodayProfit != 6 || resp.Data.Profit.SevenDayProfit != 13 || resp.Data.Profit.SampledDays != 2 {
 		t.Fatalf("profit summary = %#v", resp.Data.Profit)
 	}
-	if resp.Data.Profit.TodayGuaranteedRevenue != 10 || resp.Data.Profit.GuaranteedRevenueRatioBP != 10000 {
+	if resp.Data.Profit.TodayGuaranteedRevenue != 6 || resp.Data.Profit.GuaranteedRevenueRatioBP != 10000 {
 		t.Fatalf("default guaranteed revenue = %#v", resp.Data.Profit)
 	}
 	change := resp.Data.RecentRateChanges[0]

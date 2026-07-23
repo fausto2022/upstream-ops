@@ -100,7 +100,7 @@ func TestSyncUsesActualCostWithoutAccountCost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("profit summary: %v", err)
 	}
-	if !summary.Available || summary.TodayRevenue != 10 || summary.TodayGuaranteedRevenue != 8 || summary.GuaranteedRevenueRatioBP != guaranteedRevenueRatio || summary.TodayCost != 3 || summary.TodayProfit != 7 {
+	if !summary.Available || summary.TodayRevenue != 10 || summary.TodayGuaranteedRevenue != 5 || summary.GuaranteedRevenueRatioBP != guaranteedRevenueRatio || summary.TodayCost != 3 || summary.TodayProfit != 7 {
 		t.Fatalf("profit should use actual revenue and converted upstream cost: %#v", summary)
 	}
 }

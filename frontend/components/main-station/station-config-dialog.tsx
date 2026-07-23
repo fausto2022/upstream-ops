@@ -300,7 +300,7 @@ export function StationConfigDialog({
                   onChange={(event) => setGuaranteedRevenueRatioPercent(Number(event.target.value))}
                 />
                 <p className="text-xs text-muted-foreground">
-                  实收 1000、到账余额 1200 时填写 83.33%；保底收入 = 用户余额消费 × 折算比例。
+                  实收 1000、到账余额 1200 时填写 83.33%；保底收入 = 用户余额消费 × 折算比例 - 上游成本。
                 </p>
               </div>
             </div>
