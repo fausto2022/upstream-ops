@@ -449,6 +449,35 @@ func (a *AdminClient) SyncAccountModelsFromUpstream(ctx context.Context, t Admin
 	return decodeAdminModels(resp.Body())
 }
 
+func (a *AdminClient) UpdateAccountModelMapping(ctx context.Context, t AdminTarget, id int64, models []string) error {
+	mapping := make(map[string]string, len(models))
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model != "" {
+			mapping[model] = model
+		}
+	}
+	if len(mapping) == 0 {
+		return errors.New("update account model mapping: no valid models")
+	}
+	payload := map[string]any{
+		"credentials": map[string]any{"model_mapping": mapping},
+	}
+	resp, err := a.client.http.R().
+		SetContext(ctx).
+		SetHeader("Content-Type", "application/json").
+		SetHeader("x-api-key", t.APIKey).
+		SetBody(payload).
+		Put(strings.TrimRight(t.BaseURL, "/") + "/api/v1/admin/accounts/" + strconv.FormatInt(id, 10))
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("update account model mapping: %w", connector.HTTPStatusError(resp.StatusCode(), resp.Body()))
+	}
+	return nil
+}
+
 func (a *AdminClient) ListAccountModels(ctx context.Context, t AdminTarget, id int64) ([]string, error) {
 	body, err := a.getJSON(ctx, t, "/api/v1/admin/accounts/"+strconv.FormatInt(id, 10)+"/models")
 	if err != nil {

@@ -352,6 +352,7 @@ export interface SystemAuthConfig {
 
 export interface SystemSchedulerRetentionConfig {
   cron: string
+  runtimeLogsDays: number
   monitorLogsDays: number
   balanceSnapshotsDays: number
   notificationLogsDays: number

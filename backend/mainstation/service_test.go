@@ -40,6 +40,8 @@ type fakeAdminClient struct {
 	syncModelCalls      []int64
 	syncModelsErr       error
 	syncModelsEmpty     bool
+	modelMappingCalls   []int64
+	modelMappingErr     error
 }
 
 func (f *fakeAdminClient) Ping(context.Context, sub2api.AdminTarget) error { return f.pingErr }
@@ -144,6 +146,30 @@ func (f *fakeAdminClient) SyncAccountModelsFromUpstream(_ context.Context, _ sub
 		return nil, gorm.ErrRecordNotFound
 	}
 	return append([]string(nil), models...), nil
+}
+func (f *fakeAdminClient) UpdateAccountModelMapping(_ context.Context, _ sub2api.AdminTarget, id int64, models []string) error {
+	f.modelMappingCalls = append(f.modelMappingCalls, id)
+	if f.modelMappingErr != nil {
+		return f.modelMappingErr
+	}
+	clean := make([]string, 0, len(models))
+	seen := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		clean = append(clean, model)
+	}
+	if f.accountModels == nil {
+		f.accountModels = make(map[int64][]string)
+	}
+	f.accountModels[id] = clean
+	return nil
 }
 func (f *fakeAdminClient) ListAccountModels(_ context.Context, _ sub2api.AdminTarget, id int64) ([]string, error) {
 	models := f.accountModels[id]
@@ -799,8 +825,16 @@ func TestSyncManagedAccountModelsRejectsErrorsAndEmptyResults(t *testing.T) {
 	}
 	admin.syncModelsEmpty = false
 	admin.accountModels = map[int64][]string{31: {"gpt-test"}}
+	admin.modelMappingErr = errors.New("write failed")
+	if err := service.syncManagedAccountModels(context.Background(), admin, target, 31); err == nil || !strings.Contains(err.Error(), "write failed") {
+		t.Fatalf("persist model error = %v", err)
+	}
+	admin.modelMappingErr = nil
 	if err := service.syncManagedAccountModels(context.Background(), admin, target, 31); err != nil {
 		t.Fatalf("sync managed account models: %v", err)
+	}
+	if !slices.Equal(admin.modelMappingCalls, []int64{31, 31}) {
+		t.Fatalf("model mapping calls = %#v", admin.modelMappingCalls)
 	}
 }
 

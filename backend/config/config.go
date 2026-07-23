@@ -89,6 +89,7 @@ type SchedulerConfig struct {
 // Cron 为空时不启动清理任务。
 type RetentionConfig struct {
 	Cron                 string `mapstructure:"cron" yaml:"cron" json:"cron"`
+	RuntimeLogsDays      int    `mapstructure:"runtimeLogsDays" yaml:"runtimeLogsDays" json:"runtimeLogsDays"`
 	MonitorLogsDays      int    `mapstructure:"monitorLogsDays" yaml:"monitorLogsDays" json:"monitorLogsDays"`
 	BalanceSnapshotsDays int    `mapstructure:"balanceSnapshotsDays" yaml:"balanceSnapshotsDays" json:"balanceSnapshotsDays"`
 	NotificationLogsDays int    `mapstructure:"notificationLogsDays" yaml:"notificationLogsDays" json:"notificationLogsDays"`
@@ -344,6 +345,7 @@ func setDefaults(v *viper.Viper) {
 	// 历史清理：每天凌晨 3:17 跑一次（6 字段 cron 含秒），
 	// monitor 30 天 / balance 90 天 / notify 90 天。rate_change_logs 不清理（业务核心数据）。
 	v.SetDefault("scheduler.retention.cron", "0 17 3 * * *")
+	v.SetDefault("scheduler.retention.runtimeLogsDays", 30)
 	v.SetDefault("scheduler.retention.monitorLogsDays", 30)
 	v.SetDefault("scheduler.retention.balanceSnapshotsDays", 90)
 	v.SetDefault("scheduler.retention.notificationLogsDays", 90)

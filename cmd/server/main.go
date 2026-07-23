@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -45,7 +46,11 @@ func main() {
 	}
 	resolvedConfigPath := config.ResolvePath(*configPath, usedConfigPath)
 
-	log := logger.New(cfg.Log.Level, cfg.Log.Format)
+	logDir := filepath.Join(filepath.Dir(cfg.Database.Path), "logs")
+	if cfg.Database.Driver != "sqlite" {
+		logDir = filepath.Join("data", "logs")
+	}
+	log := logger.New(cfg.Log.Level, cfg.Log.Format, logDir)
 	log.Info("starting RelayDeck", "port", cfg.Server.Port, "mode", cfg.Server.Mode)
 
 	if _, err := os.Stat(resolvedConfigPath); errors.Is(err, os.ErrNotExist) {

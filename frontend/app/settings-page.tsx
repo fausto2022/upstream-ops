@@ -536,7 +536,31 @@ export default function SettingsPage() {
                   }
                 />
               </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <Field
+                  label="应用运行日志"
+                  description="保留按天落盘的后端运行日志，便于排查线上问题。"
+                >
+                  <RetentionDaysSelect
+                    value={form.scheduler.retention.runtimeLogsDays}
+                    onChange={(value) =>
+                      setForm((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              scheduler: {
+                                ...prev.scheduler,
+                                retention: {
+                                  ...prev.scheduler.retention,
+                                  runtimeLogsDays: value,
+                                },
+                              },
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </Field>
                 <Field
                   label="运行与同步日志"
                   description="保留最近的监控和同步执行记录。"

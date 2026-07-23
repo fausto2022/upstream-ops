@@ -1033,6 +1033,29 @@ func (s *Service) syncManagedAccountModels(ctx context.Context, client adminClie
 	if len(models) == 0 {
 		return errors.New("sync managed account models from upstream returned no models")
 	}
+	if err := client.UpdateAccountModelMapping(ctx, target, remoteAccountID, models); err != nil {
+		return fmt.Errorf("persist managed account models: %w", err)
+	}
+	persisted, err := client.ListAccountModels(ctx, target, remoteAccountID)
+	if err != nil {
+		return fmt.Errorf("verify managed account models: %w", err)
+	}
+	persistedSet := make(map[string]struct{}, len(persisted))
+	for _, model := range persisted {
+		persistedSet[strings.TrimSpace(model)] = struct{}{}
+	}
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		if _, ok := persistedSet[model]; !ok {
+			return fmt.Errorf("verify managed account models: model %q was not persisted", model)
+		}
+	}
+	if s.log != nil {
+		s.log.Info("managed account models persisted", "remote_account_id", remoteAccountID, "models", len(persistedSet))
+	}
 	return nil
 }
 

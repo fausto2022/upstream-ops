@@ -10,6 +10,7 @@ import (
 
 func TestAdminClientUsesAPIKeyAndDecodesAccountWrites(t *testing.T) {
 	mux := http.NewServeMux()
+	modelMappingWritten := false
 	mux.HandleFunc("/api/v1/admin/groups/all", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-api-key") != "admin-key" {
 			t.Fatalf("x-api-key = %q", r.Header.Get("x-api-key"))
@@ -75,6 +76,19 @@ func TestAdminClientUsesAPIKeyAndDecodesAccountWrites(t *testing.T) {
 					"code": 0,
 					"data": map[string]any{"id": 8, "name": "updated", "status": "active", "concurrency": 40, "priority": 2, "load_factor": 40},
 				})
+				return
+			}
+			if len(raw) == 1 && raw["credentials"] != nil {
+				credentials, ok := raw["credentials"].(map[string]any)
+				if !ok {
+					t.Fatalf("model mapping credentials = %#v", raw["credentials"])
+				}
+				mapping, ok := credentials["model_mapping"].(map[string]any)
+				if !ok || mapping["gpt-a"] != "gpt-a" || mapping["gpt-b"] != "gpt-b" {
+					t.Fatalf("model mapping body = %#v", raw)
+				}
+				modelMappingWritten = true
+				_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"id": 8}})
 				return
 			}
 			encoded, _ := json.Marshal(raw)
@@ -269,6 +283,12 @@ func TestAdminClientUsesAPIKeyAndDecodesAccountWrites(t *testing.T) {
 	}
 	if len(models) != 2 || models[0] != "gpt-a" || models[1] != "gpt-b" {
 		t.Fatalf("models = %#v", models)
+	}
+	if err := client.UpdateAccountModelMapping(context.Background(), target, 8, models); err != nil {
+		t.Fatalf("UpdateAccountModelMapping: %v", err)
+	}
+	if !modelMappingWritten {
+		t.Fatal("model mapping was not written")
 	}
 	models, err = client.ListAccountModels(context.Background(), target, 8)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/fausto2022/relaydeck/backend/captcha"
 	"github.com/fausto2022/relaydeck/backend/config"
 	"github.com/fausto2022/relaydeck/backend/crypto"
+	appLogger "github.com/fausto2022/relaydeck/backend/logger"
 	"github.com/fausto2022/relaydeck/backend/monitor"
 	"github.com/fausto2022/relaydeck/backend/storage"
 	"github.com/robfig/cron/v3"
@@ -187,7 +188,8 @@ func (s *Scheduler) runRates() {
 
 func (s *Scheduler) hasRetention() bool {
 	r := s.cfg.Retention
-	return r.MonitorLogsDays > 0 ||
+	return r.RuntimeLogsDays > 0 ||
+		r.MonitorLogsDays > 0 ||
 		r.BalanceSnapshotsDays > 0 ||
 		r.NotificationLogsDays > 0 ||
 		r.AnnouncementsDays > 0 ||
@@ -203,6 +205,15 @@ func (s *Scheduler) runRetention() {
 	defer s.retentionMu.Unlock()
 	r := s.cfg.Retention
 	now := time.Now()
+	if r.RuntimeLogsDays > 0 {
+		cutoff := now.AddDate(0, 0, -r.RuntimeLogsDays)
+		n, err := appLogger.DeleteRuntimeLogsBefore(cutoff)
+		if err != nil {
+			s.log.Warn("retention runtime logs failed", "err", err)
+		} else if n > 0 {
+			s.log.Info("retention runtime logs deleted", "files", n, "before", cutoff)
+		}
+	}
 
 	if r.MonitorLogsDays > 0 {
 		cutoff := now.AddDate(0, 0, -r.MonitorLogsDays)
