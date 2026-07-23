@@ -295,6 +295,10 @@ func (s *Service) syncManagedSourceBinding(
 	desiredName := s.managedAutomaticName(pool, member)
 	nameChanged := member.AccountName != desiredName || remote.Name != desiredName
 	if !nameChanged && !groupChanged {
+		models, listErr := client.ListAccountModels(ctx, adminTarget, remote.ID)
+		if listErr == nil && len(models) > 0 {
+			return false, nil
+		}
 		if err := s.syncManagedAccountModels(ctx, client, adminTarget, remote.ID); err != nil && s.log != nil {
 			s.log.Warn("refresh managed account models", "member_id", member.ID, "remote_account_id", remote.ID, "err", err)
 		}
