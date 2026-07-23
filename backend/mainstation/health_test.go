@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -663,6 +664,50 @@ func TestHealthProtectionReconcilesExistingStateAndRequiresAutoRecovery(t *testi
 	locks, err = service.ListGuardLocks(*member.RemoteAccountID)
 	if err != nil || guardLockActive(locks, "health") || !admin.accounts[0].Schedulable {
 		t.Fatalf("enabled auto recovery state = locks %#v, schedulable=%v, err=%v", locks, admin.accounts[0].Schedulable, err)
+	}
+}
+
+func TestSuccessfulManagedHealthCheckClearsStaleSyncLock(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/sub2api/billing":
+			_ = json.NewEncoder(w).Encode(map[string]any{"effective_rate_multiplier": 0.8})
+		case "/v1/chat/completions":
+			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]any{"content": "OK"}}}})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	service, db, admin, _ := newTestService(t)
+	member := createHealthMember(t, service, db, admin, server.URL, "")
+	member.OwnershipMode = "managed"
+	member.BindingStatus = "verified"
+	if err := service.store.UpdateMember(member); err != nil {
+		t.Fatalf("update managed member: %v", err)
+	}
+	admin.accountModels = map[int64][]string{*member.RemoteAccountID: {"gpt-test"}}
+	if _, err := service.ActivateGuardLock(context.Background(), *member.RemoteAccountID, "sync", "initial health pending", nil, "syncer"); err != nil {
+		t.Fatalf("activate sync lock: %v", err)
+	}
+	if _, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L0", Force: true}); err != nil {
+		t.Fatalf("L0 health check: %v", err)
+	}
+	locks, err := service.ListGuardLocks(*member.RemoteAccountID)
+	if err != nil || !guardLockActive(locks, "sync") || admin.accounts[0].Schedulable {
+		t.Fatalf("L0 cleared sync protection: locks=%#v schedulable=%v err=%v", locks, admin.accounts[0].Schedulable, err)
+	}
+	result, err := service.CheckMember(context.Background(), member.PoolID, member.ID, HealthCheckInput{Level: "L1", Force: true})
+	if err != nil {
+		t.Fatalf("L1 health check: %v", err)
+	}
+	locks, err = service.ListGuardLocks(*member.RemoteAccountID)
+	if err != nil || guardLockActive(locks, "sync") || !admin.accounts[0].Schedulable {
+		t.Fatalf("L1 did not recover sync protection: locks=%#v schedulable=%v err=%v", locks, admin.accounts[0].Schedulable, err)
+	}
+	if !strings.Contains(result.Check.TriggeredAction, "sync_lock_cleared") {
+		t.Fatalf("triggered action = %q", result.Check.TriggeredAction)
 	}
 }
 

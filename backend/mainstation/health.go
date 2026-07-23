@@ -173,7 +173,10 @@ func (s *Service) CheckMember(ctx context.Context, poolID, memberID uint, in Hea
 		}
 		_ = s.store.SaveConfig(config)
 	}
-	automationAction, automationErr := s.applyHealthAutomation(ctx, pool, member, &check, oldHealth, newHealth)
+	syncRecoveryAction, syncRecoveryErr := s.recoverManagedSyncLock(ctx, pool, member, &check, newHealth)
+	healthAutomationAction, healthAutomationErr := s.applyHealthAutomation(ctx, pool, member, &check, oldHealth, newHealth)
+	automationAction := strings.Join(nonEmptyStrings(syncRecoveryAction, healthAutomationAction), ",")
+	automationErr := errors.Join(syncRecoveryErr, healthAutomationErr)
 	if automationAction != "" {
 		if check.TriggeredAction != "" {
 			check.TriggeredAction += ","
@@ -244,6 +247,55 @@ func (s *Service) applyHealthAutomation(ctx context.Context, pool *storage.MainA
 		return "health_lock_cleared", nil
 	}
 	return "", nil
+}
+
+func (s *Service) recoverManagedSyncLock(ctx context.Context, pool *storage.MainAccountPool, member *storage.MainAccountPoolMember, check *storage.MainAccountHealthCheck, newHealth string) (string, error) {
+	if member.RemoteAccountID == nil || member.OwnershipMode != "managed" ||
+		(member.BindingStatus != "verified" && member.BindingStatus != "manual_confirmed") ||
+		check.Status != "success" || newHealth != "healthy" {
+		return "", nil
+	}
+	requiredLevel := "L0"
+	if effectiveHealthModel(pool.Platform, member.HealthModel, s.configuredHealthModels()) != "" {
+		requiredLevel = "L1"
+	}
+	if check.Level != requiredLevel && !(requiredLevel == "L1" && check.Level == "L2") {
+		return "", nil
+	}
+	remoteAccountID := *member.RemoteAccountID
+	locks, err := s.store.ListActiveGuardLocks(remoteAccountID)
+	if err != nil || !guardLockActive(locks, "sync") {
+		return "", err
+	}
+	_, target, apiKey, err := s.loadAdminTarget()
+	if err != nil {
+		return "sync_lock_recovery_failed", err
+	}
+	client := s.adminFactory()
+	adminTarget := sub2api.AdminTarget{BaseURL: target.BaseURL, APIKey: apiKey}
+	models, err := client.ListAccountModels(ctx, adminTarget, remoteAccountID)
+	if err != nil {
+		return "sync_lock_recovery_failed", fmt.Errorf("list managed account models before sync recovery: %w", redactSecretError(err, apiKey))
+	}
+	if len(models) == 0 {
+		if err := s.syncManagedAccountModels(ctx, client, adminTarget, remoteAccountID); err != nil {
+			return "sync_lock_recovery_failed", err
+		}
+	}
+	if _, err := s.ClearGuardLock(ctx, remoteAccountID, "sync", "health"); err != nil {
+		return "sync_lock_recovery_failed", err
+	}
+	return "sync_lock_cleared", nil
+}
+
+func nonEmptyStrings(values ...string) []string {
+	items := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			items = append(items, value)
+		}
+	}
+	return items
 }
 
 func (s *Service) executeHealthProbe(ctx context.Context, level, model string, member *storage.MainAccountPoolMember) probeExecution {
