@@ -42,6 +42,7 @@ type fakeAdminClient struct {
 	deleteAccountErr    error
 	nextAccountID       int64
 	accountModels       map[int64][]string
+	listModelCalls      []int64
 	syncModelCalls      []int64
 	syncModelsErr       error
 	syncModelsEmpty     bool
@@ -193,6 +194,7 @@ func (f *fakeAdminClient) UpdateAccountModelMapping(_ context.Context, _ sub2api
 	return nil
 }
 func (f *fakeAdminClient) ListAccountModels(_ context.Context, _ sub2api.AdminTarget, id int64) ([]string, error) {
+	f.listModelCalls = append(f.listModelCalls, id)
 	models := f.accountModels[id]
 	if len(models) == 0 {
 		return nil, gorm.ErrRecordNotFound
@@ -573,6 +575,47 @@ func TestMainStationSyncReportsPricingChanges(t *testing.T) {
 	changed, err := service.Sync(context.Background())
 	if err != nil || !changed.PricingChanged {
 		t.Fatalf("changed sync = %#v, err=%v", changed, err)
+	}
+}
+
+func TestMainStationSyncOnlyMarksRankingDirtyForSchedulingChanges(t *testing.T) {
+	service, _, admin, _ := newTestService(t)
+	configureTestStation(t, service)
+	admin.groups = []sub2api.AdminGroup{{ID: 11, Name: "main", RateMultiplier: 1, Status: "active"}}
+	admin.accounts = []sub2api.AdminAccount{{
+		ID: 21, Name: "account", Status: "active", Schedulable: true,
+		Concurrency: 10, Priority: 10, Weight: 1, GroupIDs: []int64{11},
+	}}
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	groups, err := service.ListGroups(false)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups = %#v, err=%v", groups, err)
+	}
+	poolID, err := service.GroupPoolID(groups[0].ID)
+	if err != nil {
+		t.Fatalf("resolve pool: %v", err)
+	}
+	if err := service.store.CompletePoolRanking(poolID, service.now(), service.now(), ""); err != nil {
+		t.Fatalf("clear ranking state: %v", err)
+	}
+
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("unchanged sync: %v", err)
+	}
+	pool, err := service.store.FindPool(poolID)
+	if err != nil || pool.RankingDirtyAt != nil {
+		t.Fatalf("unchanged sync dirtied ranking: pool=%#v err=%v", pool, err)
+	}
+
+	admin.accounts[0].Schedulable = false
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("changed sync: %v", err)
+	}
+	pool, err = service.store.FindPool(poolID)
+	if err != nil || pool.RankingDirtyAt == nil {
+		t.Fatalf("scheduling change did not dirty ranking: pool=%#v err=%v", pool, err)
 	}
 }
 

@@ -127,6 +127,11 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 	for _, account := range accounts {
 		snapshots = append(snapshots, accountSnapshot(account))
 	}
+	existingSnapshots, err := s.store.ListAllAccountSnapshots(true)
+	if err != nil {
+		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("load existing main station account snapshots: %w", err))
+	}
+	accountSchedulingChanged := mainStationAccountSchedulingChanged(existingSnapshots, snapshots)
 	missingAccounts, err := s.store.ReplaceAccountSnapshots(snapshots, syncedAt)
 	if err != nil {
 		return nil, s.recordSyncFailure(target, apiKey, source, fmt.Errorf("save main station account snapshots: %w", err))
@@ -166,11 +171,67 @@ func (s *Service) sync(ctx context.Context, source string) (*SyncResult, error) 
 		result.OrphanedMembers = len(orphanedMembers)
 		s.notifyOrphanedMembers(ctx, orphanedMembers)
 	}
-	if err := s.store.MarkAllPoolRankingsDirty(syncedAt); err != nil && s.log != nil {
-		s.log.Warn("mark main station rankings dirty after sync", "err", err)
+	if pricingChanged || accountSchedulingChanged {
+		if err := s.store.MarkAllPoolRankingsDirty(syncedAt); err != nil && s.log != nil {
+			s.log.Warn("mark main station rankings dirty after sync", "err", err)
+		}
 	}
 	_ = s.appendAudit(nil, nil, nil, "main_station_sync", source, true, nil, result, nil, "", "")
 	return result, nil
+}
+
+func mainStationAccountSchedulingChanged(existing, current []storage.MainStationAccountSnapshot) bool {
+	existingByRemoteID := make(map[int64]storage.MainStationAccountSnapshot, len(existing))
+	for i := range existing {
+		existingByRemoteID[existing[i].RemoteAccountID] = existing[i]
+	}
+	currentRemoteIDs := make(map[int64]struct{}, len(current))
+	for i := range current {
+		item := current[i]
+		currentRemoteIDs[item.RemoteAccountID] = struct{}{}
+		previous, ok := existingByRemoteID[item.RemoteAccountID]
+		if !ok {
+			continue
+		}
+		if previous.Status != item.Status || previous.Schedulable != item.Schedulable ||
+			previous.Concurrency != item.Concurrency || previous.Priority != item.Priority ||
+			previous.Weight != item.Weight || !sameRemoteGroupIDs(previous.GroupIDsJSON, item.GroupIDsJSON) || previous.Missing {
+			return true
+		}
+	}
+	for i := range existing {
+		if existing[i].Missing {
+			continue
+		}
+		if _, ok := currentRemoteIDs[existing[i].RemoteAccountID]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func sameRemoteGroupIDs(leftJSON, rightJSON string) bool {
+	var left, right []int64
+	if err := json.Unmarshal([]byte(leftJSON), &left); err != nil {
+		return leftJSON == rightJSON
+	}
+	if err := json.Unmarshal([]byte(rightJSON), &right); err != nil {
+		return false
+	}
+	if len(left) != len(right) {
+		return false
+	}
+	counts := make(map[int64]int, len(left))
+	for _, id := range left {
+		counts[id]++
+	}
+	for _, id := range right {
+		counts[id]--
+		if counts[id] < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func mainStationGroupPricingChanged(previous, current *storage.UpstreamSyncTargetGroup) bool {

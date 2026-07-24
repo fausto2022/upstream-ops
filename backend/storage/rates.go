@@ -30,6 +30,19 @@ func (r *Rates) ListByChannel(channelID uint) ([]RateSnapshot, error) {
 	return list, nil
 }
 
+// ListByChannels 返回多个渠道的倍率快照，避免调用方逐渠道查询。
+func (r *Rates) ListByChannels(channelIDs []uint) ([]RateSnapshot, error) {
+	if len(channelIDs) == 0 {
+		return []RateSnapshot{}, nil
+	}
+	var list []RateSnapshot
+	if err := r.db.Where("channel_id IN ?", channelIDs).
+		Order("channel_id ASC, model_name ASC").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 func (r *Rates) FindByID(channelID, id uint) (*RateSnapshot, error) {
 	var item RateSnapshot
 	if err := r.db.First(&item, "id = ? AND channel_id = ?", id, channelID).Error; err != nil {

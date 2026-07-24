@@ -56,6 +56,8 @@ type databaseBackupService interface {
 	Backup() (string, error)
 }
 
+const mainStationTaskTimeout = 2 * time.Minute
+
 func New(
 	cfg config.SchedulerConfig,
 	m *monitor.Service,
@@ -138,14 +140,22 @@ func (s *Scheduler) runMainStationMaintenance() {
 		return
 	}
 	defer s.mainOpsMu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	s.mainStation.CleanupTemporaryAPIKeys(ctx)
-	if s.mainStation.SyncForScheduler(ctx) {
-		s.mainStation.RunProfitEvaluation(ctx)
+	s.runMainStationTask(s.mainStation.CleanupTemporaryAPIKeys)
+	pricingChanged := false
+	s.runMainStationTask(func(ctx context.Context) {
+		pricingChanged = s.mainStation.SyncForScheduler(ctx)
+	})
+	if pricingChanged {
+		s.runMainStationTask(s.mainStation.RunProfitEvaluation)
 	}
-	s.mainStation.RunDueSchedulingReconciles(ctx)
-	s.mainStation.RunDueRankings(ctx)
+	s.runMainStationTask(s.mainStation.RunDueSchedulingReconciles)
+	s.runMainStationTask(s.mainStation.RunDueRankings)
+}
+
+func (s *Scheduler) runMainStationTask(run func(context.Context)) {
+	ctx, cancel := context.WithTimeout(context.Background(), mainStationTaskTimeout)
+	defer cancel()
+	run(ctx)
 }
 
 func (s *Scheduler) Stop() {
@@ -174,15 +184,17 @@ func (s *Scheduler) runRates() {
 		return
 	}
 	defer s.ratesMu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
 	if s.monitor != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		s.monitor.ScanAllRates(ctx)
+		cancel()
 	}
 	if s.mainStation != nil {
-		s.mainStation.SyncForScheduler(ctx)
-		s.mainStation.RunProfitEvaluation(ctx)
-		s.mainStation.RunAutoExpansion(ctx)
+		s.mainOpsMu.Lock()
+		defer s.mainOpsMu.Unlock()
+		s.runMainStationTask(func(ctx context.Context) { s.mainStation.SyncForScheduler(ctx) })
+		s.runMainStationTask(s.mainStation.RunProfitEvaluation)
+		s.runMainStationTask(s.mainStation.RunAutoExpansion)
 	}
 }
 

@@ -27,6 +27,24 @@ type pricingSyncMainStation struct {
 	profitCalls    atomic.Int32
 }
 
+type expiringMaintenanceMainStation struct {
+	syncContext       context.Context
+	rankingContextErr error
+}
+
+func (f *expiringMaintenanceMainStation) RunDueHealthChecks(context.Context)      {}
+func (f *expiringMaintenanceMainStation) CleanupTemporaryAPIKeys(context.Context) {}
+func (f *expiringMaintenanceMainStation) SyncForScheduler(ctx context.Context) bool {
+	f.syncContext = ctx
+	return false
+}
+func (f *expiringMaintenanceMainStation) RunDueSchedulingReconciles(context.Context) {}
+func (f *expiringMaintenanceMainStation) RunDueRankings(ctx context.Context) {
+	f.rankingContextErr = ctx.Err()
+}
+func (f *expiringMaintenanceMainStation) RunProfitEvaluation(context.Context) {}
+func (f *expiringMaintenanceMainStation) RunAutoExpansion(context.Context)    {}
+
 func (f *pricingSyncMainStation) RunDueHealthChecks(context.Context)         {}
 func (f *pricingSyncMainStation) CleanupTemporaryAPIKeys(context.Context)    {}
 func (f *pricingSyncMainStation) SyncForScheduler(context.Context) bool      { return f.pricingChanged }
@@ -231,5 +249,20 @@ func TestRunMainStationMaintenanceEvaluatesProfitOnlyAfterPricingChange(t *testi
 	s.runMainStationMaintenance()
 	if calls := mainStation.profitCalls.Load(); calls != 1 {
 		t.Fatalf("changed pricing profit evaluations = %d, want 1", calls)
+	}
+}
+
+func TestRunMainStationMaintenanceUsesFreshContextForEachStage(t *testing.T) {
+	mainStation := &expiringMaintenanceMainStation{}
+	s := New(
+		config.SchedulerConfig{}, nil, nil, nil, nil, nil, nil, nil, nil,
+		mainStation, nil, config.ProxyConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	s.runMainStationMaintenance()
+	if mainStation.syncContext.Err() == nil {
+		t.Fatal("completed sync context was not canceled")
+	}
+	if mainStation.rankingContextErr != nil {
+		t.Fatalf("ranking reused expired context: %v", mainStation.rankingContextErr)
 	}
 }

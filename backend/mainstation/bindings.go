@@ -39,7 +39,7 @@ func (s *Service) RecommendBindings(ctx context.Context, groupID uint) (*Binding
 	if err != nil {
 		return nil, err
 	}
-	accounts, err := s.ListGroupAccounts(groupID, false)
+	accounts, boundRemoteIDs, err := s.groupBindingAccounts(group.RemoteGroupID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,10 +55,10 @@ func (s *Service) RecommendBindings(ctx context.Context, groupID uint) (*Binding
 		GeneratedAt: s.now(),
 	}
 	for i := range accounts {
-		if accounts[i].Member != nil || accounts[i].Missing {
+		if _, bound := boundRemoteIDs[accounts[i].RemoteAccountID]; bound {
 			continue
 		}
-		result.Items = append(result.Items, recommendAccountBinding(accounts[i].MainStationAccountSnapshot, group, sources))
+		result.Items = append(result.Items, recommendAccountBinding(accounts[i], group, sources))
 	}
 	sort.SliceStable(result.Items, func(i, j int) bool {
 		if result.Items[i].Score != result.Items[j].Score {
@@ -80,11 +80,15 @@ func (s *Service) BindMembersBatch(ctx context.Context, groupID uint, in Binding
 	if err != nil {
 		return nil, err
 	}
-	accounts, err := s.ListGroupAccounts(groupID, false)
+	group, err := s.mainStationGroup(groupID)
 	if err != nil {
 		return nil, err
 	}
-	allowed := make(map[int64]AccountDTO, len(accounts))
+	accounts, boundRemoteIDs, err := s.groupBindingAccounts(group.RemoteGroupID)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[int64]storage.MainStationAccountSnapshot, len(accounts))
 	for i := range accounts {
 		allowed[accounts[i].RemoteAccountID] = accounts[i]
 	}
@@ -100,7 +104,7 @@ func (s *Service) BindMembersBatch(ctx context.Context, groupID uint, in Binding
 			row.Error = "remote_account_id is required"
 		case !exists:
 			row.Error = "remote account does not belong to the selected group"
-		case account.Member != nil:
+		case isBoundRemoteAccount(boundRemoteIDs, row.RemoteAccountID):
 			row.Error = "remote account is already bound"
 		case account.Missing:
 			row.Error = "remote account is missing"
@@ -151,6 +155,35 @@ func (s *Service) BindMembersBatch(ctx context.Context, groupID uint, in Binding
 		}, "", result.RankingError)
 	}
 	return result, nil
+}
+
+func (s *Service) groupBindingAccounts(remoteGroupID int64) ([]storage.MainStationAccountSnapshot, map[int64]struct{}, error) {
+	snapshots, err := s.store.ListAllAccountSnapshots(false)
+	if err != nil {
+		return nil, nil, err
+	}
+	members, err := s.store.ListAllMembers()
+	if err != nil {
+		return nil, nil, err
+	}
+	boundRemoteIDs := make(map[int64]struct{}, len(members))
+	for i := range members {
+		if members[i].RemoteAccountID != nil {
+			boundRemoteIDs[*members[i].RemoteAccountID] = struct{}{}
+		}
+	}
+	accounts := make([]storage.MainStationAccountSnapshot, 0)
+	for i := range snapshots {
+		if accountBelongsToRemoteGroup(&snapshots[i], remoteGroupID) {
+			accounts = append(accounts, snapshots[i])
+		}
+	}
+	return accounts, boundRemoteIDs, nil
+}
+
+func isBoundRemoteAccount(boundRemoteIDs map[int64]struct{}, remoteAccountID int64) bool {
+	_, ok := boundRemoteIDs[remoteAccountID]
+	return ok
 }
 
 func (s *Service) bindingSources(ctx context.Context, channels []storage.Channel) ([]bindingSource, []string) {

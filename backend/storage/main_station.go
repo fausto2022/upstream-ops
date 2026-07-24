@@ -894,6 +894,14 @@ func (r *MainStationStore) FindAutoExpansionAttempt(poolID, rateID uint) (*MainS
 	return &item, nil
 }
 
+func (r *MainStationStore) ListAutoExpansionAttempts(poolID uint) ([]MainStationAutoExpansionAttempt, error) {
+	var list []MainStationAutoExpansionAttempt
+	if err := r.db.Where("pool_id = ?", poolID).Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 func (r *MainStationStore) UpsertAutoExpansionAttempt(item *MainStationAutoExpansionAttempt) error {
 	now := time.Now()
 	if item.CreatedAt.IsZero() {

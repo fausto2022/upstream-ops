@@ -54,6 +54,30 @@ func TestSyncRefreshesSourceAPIKeyGroup(t *testing.T) {
 	}
 }
 
+func TestSyncDoesNotPollModelsForUnchangedManagedAccount(t *testing.T) {
+	service, _, admin, channels, member := createSourceBindingSyncFixture(t)
+	member.OwnershipMode = "managed"
+	member.SourceAPIKeyManaged = true
+	member.AccountName = "source-旧分组"
+	member.RemoteAccountName = "source-旧分组"
+	if err := service.store.UpdateMember(member); err != nil {
+		t.Fatalf("update managed member fixture: %v", err)
+	}
+	admin.accounts[0].Name = "source-旧分组"
+	channels.keys = []connector.APIKey{{
+		ID: *member.SourceAPIKeyID, Name: "旧分组", Status: "active",
+		GroupID: member.SourceGroupID, GroupName: member.SourceGroupName,
+	}}
+	channels.groups = []connector.APIKeyGroup{{ID: member.SourceGroupID, Name: member.SourceGroupName, Ratio: 0.5}}
+
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("sync unchanged managed account: %v", err)
+	}
+	if len(admin.listModelCalls) != 0 || len(admin.syncModelCalls) != 0 {
+		t.Fatalf("unchanged account model calls: list=%v sync=%v", admin.listModelCalls, admin.syncModelCalls)
+	}
+}
+
 func TestSyncPreservesSourceGroupWhenAPIKeyIsMissing(t *testing.T) {
 	service, _, _, channels, member := createSourceBindingSyncFixture(t)
 	channels.keys = nil

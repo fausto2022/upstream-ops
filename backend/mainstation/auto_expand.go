@@ -12,7 +12,6 @@ import (
 	"github.com/fausto2022/relaydeck/backend/connector"
 	"github.com/fausto2022/relaydeck/backend/rateranking"
 	"github.com/fausto2022/relaydeck/backend/storage"
-	"gorm.io/gorm"
 )
 
 const (
@@ -260,46 +259,58 @@ func (s *Service) autoExpansionCandidates(
 	if err != nil {
 		return nil, err
 	}
-	candidates := make([]autoExpansionCandidate, 0)
+	channelIDs := make([]uint, 0, len(channels))
+	channelsByID := make(map[uint]storage.Channel, len(channels))
 	for i := range channels {
-		channel := channels[i]
-		rates, err := s.rates.ListByChannel(channel.ID)
-		if err != nil {
-			return nil, err
+		channelIDs = append(channelIDs, channels[i].ID)
+		channelsByID[channels[i].ID] = channels[i]
+	}
+	rates, err := s.rates.ListByChannels(channelIDs)
+	if err != nil {
+		return nil, err
+	}
+	attempts, err := s.store.ListAutoExpansionAttempts(pool.ID)
+	if err != nil {
+		return nil, err
+	}
+	attemptsByRateID := make(map[uint]storage.MainStationAutoExpansionAttempt, len(attempts))
+	for i := range attempts {
+		attemptsByRateID[attempts[i].RateID] = attempts[i]
+	}
+	candidates := make([]autoExpansionCandidate, 0)
+	for j := range rates {
+		rate := rates[j]
+		channel, ok := channelsByID[rate.ChannelID]
+		if !ok {
+			continue
 		}
-		for j := range rates {
-			rate := rates[j]
-			if rate.LastSeenAt.IsZero() || rate.LastSeenAt.Before(now.Add(-autoExpansionRateFreshness)) || classifyAutoExpansionRate(rate) != platform {
-				continue
-			}
-			if category.rule != nil && category.classifier.ClassifyWithProvider(platform, rate.ModelName, rate.Description).RuleID != category.rule.ID {
-				continue
-			}
-			effectiveRate := connector.ApplyRechargeMultiplier(rate.Ratio, channel.RechargeMultiplier, channel.RechargeMultiplierMode)
-			costMicros := scaleFloat(effectiveRate)
-			if costMicros <= 0 || costMicros >= saleMicros {
-				continue
-			}
-			marginBasisPoints := profitBasisPoints(saleMicros, costMicros)
-			if marginBasisPoints <= pool.AutoExpandMinMarginBasisPoints {
-				continue
-			}
-			attempt, attemptErr := s.store.FindAutoExpansionAttempt(pool.ID, rate.ID)
-			matchingMember := autoExpansionMatchingMember(members, channel.ID, &rate)
-			if matchingMember != nil && (matchingMember.Status != "error" || attemptErr != nil || attempt.Status != "added_error") {
-				continue
-			}
-			if attemptErr == nil && attempt.NextAttemptAt != nil && now.Before(*attempt.NextAttemptAt) && attempt.CostMultiplierMicros == costMicros {
-				continue
-			}
-			if attemptErr != nil && !errors.Is(attemptErr, gorm.ErrRecordNotFound) {
-				return nil, attemptErr
-			}
-			candidates = append(candidates, autoExpansionCandidate{
-				channel: channel, rate: rate, existingMember: matchingMember,
-				costMicros: costMicros, marginBasisPoints: marginBasisPoints,
-			})
+		if rate.LastSeenAt.IsZero() || rate.LastSeenAt.Before(now.Add(-autoExpansionRateFreshness)) || classifyAutoExpansionRate(rate) != platform {
+			continue
 		}
+		if category.rule != nil && category.classifier.ClassifyWithProvider(platform, rate.ModelName, rate.Description).RuleID != category.rule.ID {
+			continue
+		}
+		effectiveRate := connector.ApplyRechargeMultiplier(rate.Ratio, channel.RechargeMultiplier, channel.RechargeMultiplierMode)
+		costMicros := scaleFloat(effectiveRate)
+		if costMicros <= 0 || costMicros >= saleMicros {
+			continue
+		}
+		marginBasisPoints := profitBasisPoints(saleMicros, costMicros)
+		if marginBasisPoints <= pool.AutoExpandMinMarginBasisPoints {
+			continue
+		}
+		attempt, attemptExists := attemptsByRateID[rate.ID]
+		matchingMember := autoExpansionMatchingMember(members, channel.ID, &rate)
+		if matchingMember != nil && (matchingMember.Status != "error" || !attemptExists || attempt.Status != "added_error") {
+			continue
+		}
+		if attemptExists && attempt.NextAttemptAt != nil && now.Before(*attempt.NextAttemptAt) && attempt.CostMultiplierMicros == costMicros {
+			continue
+		}
+		candidates = append(candidates, autoExpansionCandidate{
+			channel: channel, rate: rate, existingMember: matchingMember,
+			costMicros: costMicros, marginBasisPoints: marginBasisPoints,
+		})
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].marginBasisPoints != candidates[j].marginBasisPoints {
