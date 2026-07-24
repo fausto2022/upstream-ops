@@ -29,6 +29,8 @@ type Client struct {
 	http *resty.Client
 }
 
+const defaultAccountConcurrency = 1
+
 func New() *Client {
 	c := resty.New().
 		SetTimeout(30*time.Second).
@@ -222,7 +224,9 @@ func (c *Client) GetAccountLimits(ctx context.Context, ch *connector.Channel, se
 		return nil, fmt.Errorf("newapi self decode: %w", err)
 	}
 	if self.Concurrency <= 0 {
-		return nil, errors.New("newapi account concurrency is unavailable")
+		// 标准 NewAPI 的 User 和 /api/user/self 没有并发字段。使用保守值 1，
+		// 魔改站返回正数时仍采用其真实限制。
+		self.Concurrency = defaultAccountConcurrency
 	}
 	return &connector.AccountLimits{Concurrency: self.Concurrency}, nil
 }

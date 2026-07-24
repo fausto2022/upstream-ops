@@ -83,6 +83,24 @@ func TestGetAccountLimits(t *testing.T) {
 	}
 }
 
+func TestGetAccountLimitsDefaultsForStandardNewAPI(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/self" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"id":7,"quota":1000000}}`))
+	}))
+	defer srv.Close()
+
+	limits, err := New().GetAccountLimits(context.Background(), &connector.Channel{SiteURL: srv.URL}, &connector.AuthSession{Cookie: "session=1", UserID: "7"})
+	if err != nil {
+		t.Fatalf("GetAccountLimits: %v", err)
+	}
+	if limits.Concurrency != defaultAccountConcurrency {
+		t.Fatalf("concurrency = %d, want %d", limits.Concurrency, defaultAccountConcurrency)
+	}
+}
+
 func TestGetCosts(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
