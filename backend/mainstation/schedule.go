@@ -62,6 +62,15 @@ func (s *Service) ActivateGuardLock(ctx context.Context, remoteAccountID int64, 
 	if err != nil {
 		return nil, err
 	}
+	locks, err := s.store.ListActiveGuardLocks(remoteAccountID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range locks {
+		if locks[i].LockType == lockType {
+			return &locks[i], nil
+		}
+	}
 	item := &storage.MainAccountGuardLock{
 		RemoteAccountID: remoteAccountID,
 		MemberID:        member.ID,

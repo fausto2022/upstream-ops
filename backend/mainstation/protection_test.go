@@ -107,6 +107,38 @@ func TestBulkRecoveryPreservesNonRecoveryLocks(t *testing.T) {
 	}
 }
 
+func TestActivateGuardLockIsIdempotent(t *testing.T) {
+	service, db, admin, _ := newTestService(t)
+	current := time.Date(2026, 7, 17, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	service.now = func() time.Time { return current }
+	_, member, _ := createProfitMember(
+		t, service, db, admin, current, 0.8,
+		`{"mode":"observe","minimum_margin_basis_points":0,"risk_confirmations":1,"cost_max_age_minutes":60}`,
+	)
+	if _, err := service.ActivateGuardLock(context.Background(), *member.RemoteAccountID, "manual", "maintenance", nil, "admin"); err != nil {
+		t.Fatalf("activate guard lock: %v", err)
+	}
+	var auditCount int64
+	if err := db.Model(&storage.MainAccountAuditLog{}).
+		Where("action IN ?", []string{"guard_lock_activate", "schedulable_reconcile"}).
+		Count(&auditCount).Error; err != nil {
+		t.Fatalf("count first activation audits: %v", err)
+	}
+	beforeCalls := len(admin.schedulableCalls)
+	if _, err := service.ActivateGuardLock(context.Background(), *member.RemoteAccountID, "manual", "duplicate", nil, "admin"); err != nil {
+		t.Fatalf("repeat guard lock: %v", err)
+	}
+	var repeatedAuditCount int64
+	if err := db.Model(&storage.MainAccountAuditLog{}).
+		Where("action IN ?", []string{"guard_lock_activate", "schedulable_reconcile"}).
+		Count(&repeatedAuditCount).Error; err != nil {
+		t.Fatalf("count repeated activation audits: %v", err)
+	}
+	if repeatedAuditCount != auditCount || len(admin.schedulableCalls) != beforeCalls {
+		t.Fatalf("duplicate activation wrote state: audits %d -> %d, calls=%#v", auditCount, repeatedAuditCount, admin.schedulableCalls)
+	}
+}
+
 func TestPoolCapacityThresholds(t *testing.T) {
 	service, db, admin, _ := newTestService(t)
 	current := time.Date(2026, 7, 17, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))

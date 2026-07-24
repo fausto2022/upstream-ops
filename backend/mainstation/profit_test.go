@@ -53,6 +53,38 @@ func TestProfitProtectionUsesFixedPointAndKeepsLocksIndependent(t *testing.T) {
 	if len(admin.schedulableCalls) != 1 || admin.schedulableCalls[0] {
 		t.Fatalf("margin schedulable calls = %#v", admin.schedulableCalls)
 	}
+	if err := service.store.CompletePoolRanking(pool.ID, current, current, ""); err != nil {
+		t.Fatalf("clear ranking after margin protection: %v", err)
+	}
+	var guardAuditCount, reconcileAuditCount int64
+	if err := db.Model(&storage.MainAccountAuditLog{}).Where("action = ?", "guard_lock_activate").Count(&guardAuditCount).Error; err != nil {
+		t.Fatalf("count guard audits: %v", err)
+	}
+	if err := db.Model(&storage.MainAccountAuditLog{}).Where("action = ?", "schedulable_reconcile").Count(&reconcileAuditCount).Error; err != nil {
+		t.Fatalf("count reconcile audits: %v", err)
+	}
+	current = current.Add(5 * time.Minute)
+	stable, err := service.EvaluatePool(context.Background(), pool.ID, "manual")
+	if err != nil {
+		t.Fatalf("stable risk evaluation: %v", err)
+	}
+	if len(stable.ProtectionApplied) != 1 || len(admin.schedulableCalls) != 1 {
+		t.Fatalf("stable risk repeated protection: result=%#v calls=%#v", stable, admin.schedulableCalls)
+	}
+	var stableGuardAuditCount, stableReconcileAuditCount int64
+	if err := db.Model(&storage.MainAccountAuditLog{}).Where("action = ?", "guard_lock_activate").Count(&stableGuardAuditCount).Error; err != nil {
+		t.Fatalf("count stable guard audits: %v", err)
+	}
+	if err := db.Model(&storage.MainAccountAuditLog{}).Where("action = ?", "schedulable_reconcile").Count(&stableReconcileAuditCount).Error; err != nil {
+		t.Fatalf("count stable reconcile audits: %v", err)
+	}
+	if stableGuardAuditCount != guardAuditCount || stableReconcileAuditCount != reconcileAuditCount {
+		t.Fatalf("stable risk wrote audits: guard %d -> %d, reconcile %d -> %d", guardAuditCount, stableGuardAuditCount, reconcileAuditCount, stableReconcileAuditCount)
+	}
+	stablePool, err := service.store.FindPool(pool.ID)
+	if err != nil || stablePool.RankingDirtyAt != nil {
+		t.Fatalf("stable risk dirtied ranking: pool=%#v err=%v", stablePool, err)
+	}
 	decision, err := service.ClearGuardLock(context.Background(), *member.RemoteAccountID, "manual", "admin")
 	if err != nil {
 		t.Fatalf("clear missing manual lock: %v", err)
@@ -125,6 +157,57 @@ func TestProfitEvaluationTreatsMinimumPositiveMarginAsHealthy(t *testing.T) {
 	}
 	if len(result.Checks) != 1 || result.Checks[0].Status != "healthy" || result.Checks[0].MarginBasisPoints != 526 {
 		t.Fatalf("minimum positive margin evaluation = %#v", result)
+	}
+}
+
+func TestProfitEvaluationSkipsStableRecoveryAndOnlyReranksForCostChanges(t *testing.T) {
+	service, db, admin, _ := newTestService(t)
+	current := time.Date(2026, 7, 17, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	service.now = func() time.Time { return current }
+	pool, member, _ := createProfitMember(
+		t, service, db, admin, current, 0.8,
+		`{"mode":"observe","minimum_margin_basis_points":0,"risk_confirmations":1,"cost_max_age_minutes":60}`,
+	)
+	config, err := service.store.GetConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	config.AutoRecovery = true
+	if err := service.store.SaveConfig(config); err != nil {
+		t.Fatalf("enable recovery: %v", err)
+	}
+
+	if _, err := service.EvaluatePool(context.Background(), pool.ID, "manual"); err != nil {
+		t.Fatalf("seed healthy evaluation: %v", err)
+	}
+	if err := service.store.CompletePoolRanking(pool.ID, current, current, ""); err != nil {
+		t.Fatalf("clear seeded ranking: %v", err)
+	}
+	beforeCalls := len(admin.schedulableCalls)
+	current = current.Add(5 * time.Minute)
+	if _, err := service.EvaluatePool(context.Background(), pool.ID, "manual"); err != nil {
+		t.Fatalf("stable healthy evaluation: %v", err)
+	}
+	if len(admin.schedulableCalls) != beforeCalls {
+		t.Fatalf("stable recovery reconciled remote account: calls=%#v", admin.schedulableCalls)
+	}
+	stablePool, err := service.store.FindPool(pool.ID)
+	if err != nil || stablePool.RankingDirtyAt != nil {
+		t.Fatalf("stable cost dirtied ranking: pool=%#v err=%v", stablePool, err)
+	}
+
+	current = current.Add(time.Minute)
+	if err := db.Model(&storage.RateSnapshot{}).
+		Where("channel_id = ? AND remote_group_id = ?", member.SourceChannelID, *member.SourceGroupID).
+		Updates(map[string]any{"ratio": 0.7, "last_seen_at": current}).Error; err != nil {
+		t.Fatalf("change source cost: %v", err)
+	}
+	if _, err := service.EvaluatePool(context.Background(), pool.ID, "manual"); err != nil {
+		t.Fatalf("changed cost evaluation: %v", err)
+	}
+	changedPool, err := service.store.FindPool(pool.ID)
+	if err != nil || changedPool.RankingDirtyAt == nil {
+		t.Fatalf("changed cost did not dirty ranking: pool=%#v err=%v", changedPool, err)
 	}
 }
 

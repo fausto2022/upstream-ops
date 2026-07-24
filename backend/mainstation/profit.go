@@ -69,14 +69,26 @@ func (s *Service) EvaluatePool(ctx context.Context, poolID uint, source string) 
 	if err != nil {
 		return nil, err
 	}
+	activeLocks, err := s.store.ListAllActiveGuardLocks()
+	if err != nil {
+		return nil, err
+	}
+	activeMarginLocks := make(map[int64]bool)
+	for i := range activeLocks {
+		if activeLocks[i].Active && activeLocks[i].LockType == "margin" {
+			activeMarginLocks[activeLocks[i].RemoteAccountID] = true
+		}
+	}
 	now := s.now()
 	result := &PoolEvaluationResult{PoolID: pool.ID, EvaluatedAt: now}
 	wouldDisable := make(map[uint]struct{})
 	applied := make(map[uint]struct{})
+	rankingInputsChanged := false
 	for i := range members {
 		member := &members[i]
 		cost := s.resolveMemberCost(member, policy, now)
 		if cost.Micros > 0 {
+			rankingInputsChanged = rankingInputsChanged || rankingCostChanged(member, cost, now)
 			member.LastCostMicros = &cost.Micros
 			member.LastCostSource = cost.Source
 			member.LastCostAt = &cost.Observed
@@ -116,14 +128,18 @@ func (s *Service) EvaluatePool(ctx context.Context, poolID uint, source string) 
 			}
 		}
 		if memberConfirmedRisk && member.RemoteAccountID != nil && config.AutoMarginProtection && config.MarginObservedAt != nil {
-			if _, err := s.ActivateGuardLock(ctx, *member.RemoteAccountID, "margin", "profit margin remained insufficient", map[string]any{
-				"pool_id": pool.ID, "member_id": member.ID, "minimum_margin_basis_points": policy.MinimumMarginBasisPoints,
-			}, "margin"); err != nil {
-				s.logProfitSchedulingError(pool.ID, member, "activate margin guard", err)
-				continue
+			remoteAccountID := *member.RemoteAccountID
+			if !activeMarginLocks[remoteAccountID] {
+				if _, err := s.ActivateGuardLock(ctx, remoteAccountID, "margin", "profit margin remained insufficient", map[string]any{
+					"pool_id": pool.ID, "member_id": member.ID, "minimum_margin_basis_points": policy.MinimumMarginBasisPoints,
+				}, "margin"); err != nil {
+					s.logProfitSchedulingError(pool.ID, member, "activate margin guard", err)
+					continue
+				}
+				activeMarginLocks[remoteAccountID] = true
 			}
 			applied[member.ID] = struct{}{}
-		} else if memberAllHealthy && member.RemoteAccountID != nil && config.AutoRecovery {
+		} else if memberAllHealthy && member.RemoteAccountID != nil && config.AutoRecovery && activeMarginLocks[*member.RemoteAccountID] {
 			confirmed, err := s.marginRecoveryConfirmed(member.ID, groups, policy, now)
 			if err != nil {
 				return nil, err
@@ -133,6 +149,7 @@ func (s *Service) EvaluatePool(ctx context.Context, poolID uint, source string) 
 					s.logProfitSchedulingError(pool.ID, member, "clear margin guard", err)
 					continue
 				}
+				activeMarginLocks[*member.RemoteAccountID] = false
 			}
 		}
 	}
@@ -154,11 +171,26 @@ func (s *Service) EvaluatePool(ctx context.Context, poolID uint, source string) 
 	if _, err := s.EvaluatePoolCapacity(ctx, pool.ID); err != nil {
 		return nil, err
 	}
-	if rankingErr := s.markPoolRankingDirty(pool.ID); rankingErr != nil && s.log != nil {
-		s.log.Warn("mark main station scheduling rank dirty", "err", rankingErr, "pool_id", pool.ID)
+	if rankingInputsChanged {
+		if rankingErr := s.markPoolRankingDirty(pool.ID); rankingErr != nil && s.log != nil {
+			s.log.Warn("mark main station scheduling rank dirty", "err", rankingErr, "pool_id", pool.ID)
+		}
 	}
 	_ = s.appendAudit(&pool.ID, nil, nil, "pool_profit_evaluate", source, true, nil, result, nil, "", "")
 	return result, nil
+}
+
+func rankingCostChanged(member *storage.MainAccountPoolMember, cost resolvedCost, now time.Time) bool {
+	if member == nil || cost.Micros <= 0 {
+		return false
+	}
+	previousKnown := validCostSnapshot(member, now)
+	currentKnown := cost.Reliable && cost.Source != "remote_account_estimate" &&
+		(cost.ExpiresAt == nil || now.Before(*cost.ExpiresAt))
+	if previousKnown != currentKnown {
+		return true
+	}
+	return currentKnown && (member.LastCostMicros == nil || *member.LastCostMicros != cost.Micros)
 }
 
 func (s *Service) logProfitSchedulingError(poolID uint, member *storage.MainAccountPoolMember, action string, err error) {
